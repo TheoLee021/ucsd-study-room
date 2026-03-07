@@ -21,16 +21,42 @@ A CLI tool and MCP server that automatically searches and books UCSD Price Cente
 - UCSD account with Duo Push enabled
 - macOS (uses Keychain for credential storage)
 
-## Installation
+## Getting Started with Claude Code
+
+If you have [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed, copy and paste this prompt to set up everything automatically:
+
+```
+Install the ucsd-study-room MCP server:
+1. Run: pip install ucsd-study-room && playwright install chromium
+2. Add to .claude/settings.json mcpServers: {"study-room": {"command": "python", "args": ["-m", "study_room.mcp_server"]}}
+3. Run: study-room config --name "MY NAME" --email "MY_EMAIL@ucsd.edu"
+4. Run: study-room login
+```
+
+Replace `MY NAME` and `MY_EMAIL@ucsd.edu` with your actual name and UCSD email before pasting.
+
+Once set up, you can use natural language in Claude Code:
+
+- "Search for available study rooms tomorrow from 2pm to 4pm"
+- "Book Price Center Study Room 3 on March 11 from 3pm to 5pm"
+- "Are there any rooms open this Friday afternoon?"
+
+## Manual Installation
 
 ```bash
 pip install ucsd-study-room
 playwright install chromium
 ```
 
-## Quick Start
+## CLI Quick Start
 
-**1. Log in with your UCSD credentials (first time only):**
+**1. Set your contact info (required before booking):**
+
+```bash
+study-room config --name "Your Name" --email "you@ucsd.edu"
+```
+
+**2. Log in with your UCSD credentials (first time only):**
 
 ```bash
 study-room login
@@ -38,13 +64,13 @@ study-room login
 
 A Chrome window will open. Enter your UCSD SSO credentials when prompted, then approve the Duo Push notification on your phone. Your session and credentials are saved for future use.
 
-**2. Search for available rooms:**
+**3. Search for available rooms:**
 
 ```bash
 study-room search --date 2026-03-11 --start 15:00 --end 17:00
 ```
 
-**3. Search and book interactively:**
+**4. Search and book interactively:**
 
 ```bash
 study-room search --date 2026-03-11 --start 15:00 --end 17:00 --book
@@ -60,41 +86,7 @@ study-room search --date 2026-03-11 --start 15:00 --end 17:00 --book
 | `study-room config` | View or set user info (`--name`, `--email`, `--attendees`) |
 | `study-room status` | Check whether the current session is valid |
 
-### Examples
-
-```bash
-# Set your contact info (required before booking)
-study-room config --name "Your Name" --email "you@ucsd.edu"
-
-# Search for rooms on a specific date and time
-study-room search --date 2026-03-11 --start 14:00 --end 16:00
-
-# Search and book in one step
-study-room search --date 2026-03-11 --start 14:00 --end 16:00 --book
-
-# Check if your session is still active
-study-room status
-```
-
-## MCP Server (Claude Code Integration)
-
-The MCP server lets you search and book study rooms using natural language through Claude Code.
-
-### Easy Setup with Claude Code
-
-If you have [Claude Code](https://claude.ai/claude-code) installed, copy and paste this prompt:
-
-```
-Install the ucsd-study-room MCP server:
-1. Run: pip install ucsd-study-room && playwright install chromium
-2. Add to .claude/settings.json mcpServers: {"study-room": {"command": "python", "args": ["-m", "study_room.mcp_server"]}}
-3. Run: study-room config --name "MY NAME" --email "MY_EMAIL@ucsd.edu"
-4. Run: study-room login
-```
-
-Replace `MY NAME` and `MY_EMAIL@ucsd.edu` with your actual name and UCSD email before pasting.
-
-### Manual Setup
+## MCP Server Setup (Manual)
 
 Add the following to your `.claude/settings.json`:
 
@@ -108,14 +100,6 @@ Add the following to your `.claude/settings.json`:
   }
 }
 ```
-
-### Usage
-
-Once configured, you can use natural language in Claude Code:
-
-- "Search for available study rooms tomorrow from 2pm to 4pm"
-- "Book Price Center Study Room 3 on March 11 from 3pm to 5pm"
-- "Are there any rooms open this Friday afternoon?"
 
 ### Available MCP Tools
 
