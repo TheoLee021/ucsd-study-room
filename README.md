@@ -80,7 +80,21 @@ study-room status
 
 The MCP server lets you search and book study rooms using natural language through Claude Code.
 
-### Setup
+### Easy Setup with Claude Code
+
+If you have [Claude Code](https://claude.ai/claude-code) installed, copy and paste this prompt:
+
+```
+Install the ucsd-study-room MCP server:
+1. Run: pip install ucsd-study-room && playwright install chromium
+2. Add to .claude/settings.json mcpServers: {"study-room": {"command": "python", "args": ["-m", "study_room.mcp_server"]}}
+3. Run: study-room config --name "MY NAME" --email "MY_EMAIL@ucsd.edu"
+4. Run: study-room login
+```
+
+Replace `MY NAME` and `MY_EMAIL@ucsd.edu` with your actual name and UCSD email before pasting.
+
+### Manual Setup
 
 Add the following to your `.claude/settings.json`:
 
