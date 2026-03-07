@@ -82,7 +82,7 @@ The MCP server lets you search and book study rooms using natural language throu
 
 ### Easy Setup with Claude Code
 
-If you have [Claude Code](https://claude.ai/claude-code) installed, copy and paste this prompt:
+If you have Claude Code installed, copy and paste this prompt:
 
 ```
 Install the ucsd-study-room MCP server:
