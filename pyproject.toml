@@ -1,0 +1,46 @@
+[project]
+name = "ucsd-study-room"
+version = "0.1.0"
+description = "CLI & MCP tool to automatically search and book UCSD study rooms via EMS"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    {name = "Theo Lee"}
+]
+keywords = ["ucsd", "study-room", "ems", "booking", "playwright", "mcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Education",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "playwright>=1.40",
+    "typer>=0.9",
+    "pyyaml>=6.0",
+    "mcp>=1.0",
+    "rich>=13.0",
+    "keyring>=25.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/TheoLee021/ucsd-study-room"
+Issues = "https://github.com/TheoLee021/ucsd-study-room/issues"
+
+[project.scripts]
+study-room = "study_room.cli:app"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["study_room*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
