@@ -17,18 +17,25 @@ KEYRING_USERNAME_KEY = "ucsd-sso-username"
 
 
 def save_credentials(username: str, password: str) -> None:
-    keyring.set_password(KEYRING_SERVICE, KEYRING_USERNAME_KEY, username)
-    keyring.set_password(KEYRING_SERVICE, username, password)
+    try:
+        keyring.set_password(KEYRING_SERVICE, KEYRING_USERNAME_KEY, username)
+        keyring.set_password(KEYRING_SERVICE, username, password)
+    except Exception:
+        print("Warning: Could not save credentials to system keyring. "
+              "Credentials will not be remembered for auto-login.")
 
 
 def load_credentials() -> tuple[str, str] | None:
-    username = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME_KEY)
-    if username is None:
+    try:
+        username = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME_KEY)
+        if username is None:
+            return None
+        password = keyring.get_password(KEYRING_SERVICE, username)
+        if password is None:
+            return None
+        return username, password
+    except Exception:
         return None
-    password = keyring.get_password(KEYRING_SERVICE, username)
-    if password is None:
-        return None
-    return username, password
 
 
 def save_session(cookies: list, path: Path = SESSION_PATH) -> None:
