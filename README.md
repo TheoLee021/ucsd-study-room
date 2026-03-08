@@ -9,7 +9,7 @@ A CLI tool and MCP server that automatically searches and books UCSD Price Cente
 
 - **Headless browser automation** -- Searches and books rooms using Playwright with real Chrome, no browser window required
 - **UCSD SSO + Duo Push authentication** -- Handles SAML-based single sign-on and Duo two-factor authentication
-- **Session persistence** -- Saves browser sessions (cookies + localStorage) for reuse; credentials stored securely in macOS Keychain
+- **Session persistence** -- Saves browser sessions (cookies + localStorage) for reuse; credentials stored securely in the system keyring (macOS Keychain, Windows Credential Locker, or Linux SecretService)
 - **Automatic re-authentication** -- When SSO expires, opens a headed browser for Duo Push re-verification without requiring you to re-enter credentials
 - **CLI interface** -- Simple `study-room` command for searching and booking from the terminal
 - **MCP server** -- Integrates with Claude Code so you can book rooms using natural language
@@ -19,7 +19,14 @@ A CLI tool and MCP server that automatically searches and books UCSD Price Cente
 - Python 3.11 or later
 - Google Chrome installed
 - UCSD account with Duo Push enabled
-- macOS (uses Keychain for credential storage)
+
+### Platform Support
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| macOS | Fully supported | Credentials stored in Keychain |
+| Windows | Supported | Credentials stored in Windows Credential Locker |
+| Linux | Supported | Requires `gnome-keyring` or `kwallet` for credential storage; falls back to manual login if unavailable. Run `playwright install --with-deps chromium` for system dependencies. |
 
 ## Getting Started with Claude Code
 
@@ -113,8 +120,8 @@ Add the following to your `.claude/settings.json`:
 
 1. **Browser automation** -- Uses Playwright with real Chrome (`channel="chrome"`) in headless mode to interact with the EMS Cloud booking system.
 2. **Authentication** -- Navigates to the UCSD SAML SSO page, submits credentials, and waits for Duo Push approval. On first login, a headed browser window opens for the Duo flow.
-3. **Session management** -- After authentication, cookies and browser storage state are saved to `~/.study-room/`. Credentials are stored in macOS Keychain via the `keyring` library. Sessions are valid for 7 days.
-4. **Auto re-login** -- When a session expires during a search or booking operation, the tool automatically opens a headed browser, loads credentials from Keychain, and re-authenticates with Duo Push.
+3. **Session management** -- After authentication, cookies and browser storage state are saved to `~/.study-room/`. Credentials are stored in the system keyring via the `keyring` library (macOS Keychain, Windows Credential Locker, or Linux SecretService). Sessions are valid for 7 days.
+4. **Auto re-login** -- When a session expires during a search or booking operation, the tool automatically opens a headed browser, loads credentials from the system keyring, and re-authenticates with Duo Push.
 5. **Room search** -- Navigates to the EMS booking page, fills in date and time fields, and parses available rooms by inspecting the DOM for booking buttons.
 6. **Booking** -- Clicks the add-to-cart button for the selected room, fills in the reservation form (name, email, terms), and submits the reservation.
 

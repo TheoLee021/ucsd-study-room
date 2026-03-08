@@ -1,9 +1,12 @@
 import asyncio
+import platform
 from dataclasses import dataclass
 from playwright.async_api import async_playwright, Page, BrowserContext
 
 from study_room.auth import get_authenticated_context, authenticate, EMS_URL, SessionExpiredError
 from study_room.config import load_config
+
+_SELECT_ALL = "Meta+a" if platform.system() == "Darwin" else "Control+a"
 
 
 @dataclass
@@ -24,7 +27,7 @@ async def _fill_input(page: Page, selector: str, value: str):
     """입력 필드의 기존 값을 지우고 새 값을 입력한다."""
     el = page.locator(selector)
     await el.click(click_count=3)
-    await el.press("Meta+a")
+    await el.press(_SELECT_ALL)
     await el.fill(value)
     await el.press("Tab")
 
