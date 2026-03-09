@@ -5,30 +5,15 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-An MCP server and CLI tool that automatically searches and books UCSD Price Center study rooms (Rooms 1--8) through the EMS Cloud booking system. Works with any MCP-compatible AI assistant.
+Automate UCSD Price Center study room booking with your AI assistant or from the terminal.
 
-## Features
+**What you can do:**
 
-- **MCP server** -- Integrates with any MCP-compatible AI assistant for natural language room booking
-- **Headless browser automation** -- Searches and books rooms using Playwright with real Chrome, no browser window required
-- **UCSD SSO + Duo Push authentication** -- Handles SAML-based single sign-on and Duo two-factor authentication
-- **Session persistence** -- Saves browser sessions (cookies + localStorage) for reuse; credentials stored securely in the system keyring (macOS Keychain, Windows Credential Locker, or Linux SecretService)
-- **Automatic re-authentication** -- When SSO expires, opens a headed browser for Duo Push re-verification without requiring you to re-enter credentials
-- **CLI interface** -- Simple `study-room` command for searching and booking from the terminal
+- **Search** available rooms by date and time
+- **Book** a room instantly
+- **View** your current reservations
 
-## Requirements
-
-- Python 3.11 or later
-- Google Chrome installed
-- UCSD account with Duo Push enabled
-
-### Platform Support
-
-| Platform | Status | Notes |
-|----------|--------|-------|
-| macOS | Fully supported | Credentials stored in Keychain |
-| Windows | Supported | Credentials stored in Windows Credential Locker |
-| Linux | Supported | Requires `gnome-keyring` or `kwallet` for credential storage; falls back to manual login if unavailable. Run `playwright install --with-deps chromium` for system dependencies. |
+Works with Claude Code, Codex CLI, Gemini CLI, Cursor, and any MCP-compatible client.
 
 ## Quick Start
 
@@ -47,8 +32,22 @@ Replace `MY NAME` and `MY_EMAIL@ucsd.edu` with your actual name and UCSD email b
 Once set up, just ask your AI assistant in natural language:
 
 - "Search for available study rooms tomorrow from 2pm to 4pm"
-- "Book Price Center Study Room 3 on March 11 from 3pm to 5pm"
+- "Book Price Center Study Room on March 11 from 3pm to 5pm"
 - "Show my current reservations"
+
+## Requirements
+
+- Python 3.11 or later
+- Google Chrome installed
+- UCSD account with Duo Push enabled
+
+### Platform Support
+
+| Platform | Status          | Notes                                                                                                                                                                           |
+| -------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS    | Fully supported | Credentials stored in Keychain                                                                                                                                                  |
+| Windows  | Supported       | Credentials stored in Windows Credential Locker                                                                                                                                 |
+| Linux    | Supported       | Requires `gnome-keyring` or `kwallet` for credential storage; falls back to manual login if unavailable. Run `playwright install --with-deps chromium` for system dependencies. |
 
 ## Manual Installation
 
@@ -66,6 +65,7 @@ playwright install chromium
 ```
 
 If using pip, configure the MCP server with:
+
 ```json
 {
   "study-room": {
@@ -107,11 +107,11 @@ The MCP server communicates over stdio and works with any MCP-compatible client.
 
 ### Compatible Clients
 
-| Client | Type | Config Location |
-|--------|------|-----------------|
-| Claude Code / Codex CLI / Gemini CLI | CLI | Each CLI's config file |
-| Claude Desktop / Codex Desktop | Desktop App | Each app's settings |
-| Cursor / Windsurf / Antigravity / Cline | IDE | Each IDE's MCP settings |
+| Client                                  | Type        | Config Location         |
+| --------------------------------------- | ----------- | ----------------------- |
+| Claude Code / Codex CLI / Gemini CLI    | CLI         | Each CLI's config file  |
+| Claude Desktop / Codex Desktop          | Desktop App | Each app's settings     |
+| Cursor / Windsurf / Antigravity / Cline | IDE         | Each IDE's MCP settings |
 
 Once configured, you can use natural language to manage bookings:
 
@@ -121,25 +121,25 @@ Once configured, you can use natural language to manage bookings:
 
 ### Available MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `search_rooms` | Search for available rooms by date and time range |
-| `book_room` | Book a specific room (use after `search_rooms`) |
-| `my_events` | List current reservations with date, room, status, and ID |
-| `login` | Authenticate via UCSD SSO + Duo Push |
+| Tool           | Description                                               |
+| -------------- | --------------------------------------------------------- |
+| `search_rooms` | Search for available rooms by date and time range         |
+| `book_room`    | Book a specific room (use after `search_rooms`)           |
+| `my_events`    | List current reservations with date, room, status, and ID |
+| `login`        | Authenticate via UCSD SSO + Duo Push                      |
 
 ## CLI Usage
 
 ### Commands
 
-| Command | Description |
-|---------|-------------|
-| `study-room login` | SSO login with Duo Push (opens browser for first-time auth) |
-| `study-room search` | Search available rooms with `--date`, `--start`, `--end` options |
-| `study-room search --book` | Search and book a room interactively |
-| `study-room events` | Show current reservations |
-| `study-room config` | View or set user info (`--name`, `--email`, `--attendees`) |
-| `study-room status` | Check whether the current session is valid |
+| Command                    | Description                                                      |
+| -------------------------- | ---------------------------------------------------------------- |
+| `study-room login`         | SSO login with Duo Push (opens browser for first-time auth)      |
+| `study-room search`        | Search available rooms with `--date`, `--start`, `--end` options |
+| `study-room search --book` | Search and book a room interactively                             |
+| `study-room events`        | Show current reservations                                        |
+| `study-room config`        | View or set user info (`--name`, `--email`, `--attendees`)       |
+| `study-room status`        | Check whether the current session is valid                       |
 
 ### Examples
 
