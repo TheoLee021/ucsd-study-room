@@ -5,7 +5,7 @@ from rich.table import Table
 
 from study_room.config import load_config, save_config, CONFIG_PATH
 from study_room.auth import login as auth_login, is_session_valid, SessionExpiredError
-from study_room.booking import search_rooms, search_and_book, Room, BookingError
+from study_room.booking import search_rooms, search_and_book, my_events, Room, Reservation, BookingError
 
 app = typer.Typer(help="UCSD Study Room Booking Tool")
 console = Console()
@@ -77,6 +77,29 @@ def search(
         for i, room in enumerate(rooms, 1):
             table.add_row(str(i), room.name)
         console.print(table)
+
+
+@app.command()
+def events():
+    """Show current reservations."""
+    try:
+        reservations = asyncio.run(my_events())
+    except SessionExpiredError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    if not reservations:
+        console.print("[yellow]No current reservations.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(title="My Reservations")
+    table.add_column("Date", style="cyan")
+    table.add_column("Room", style="green")
+    table.add_column("Status", style="yellow")
+    table.add_column("ID", style="dim")
+    for r in reservations:
+        table.add_row(r.date, r.room, r.status, r.reservation_id)
+    console.print(table)
 
 
 @app.command()
