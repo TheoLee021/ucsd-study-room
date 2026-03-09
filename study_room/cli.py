@@ -16,20 +16,20 @@ def login(
     username: str = typer.Option(..., prompt=True),
     password: str = typer.Option(..., prompt=True, hide_input=True),
 ):
-    """SSO 로그인 + Duo Push 인증."""
+    """SSO login + Duo Push authentication."""
     asyncio.run(auth_login(username, password))
 
 
 @app.command()
 def search(
-    date: str = typer.Option(..., help="날짜 (YYYY-MM-DD)"),
-    start: str = typer.Option(..., help="시작 시간 (HH:MM)"),
-    end: str = typer.Option(..., help="종료 시간 (HH:MM)"),
-    book: bool = typer.Option(False, "--book", "-b", help="검색 후 바로 예약"),
+    date: str = typer.Option(..., help="Date (YYYY-MM-DD)"),
+    start: str = typer.Option(..., help="Start time (HH:MM)"),
+    end: str = typer.Option(..., help="End time (HH:MM)"),
+    book: bool = typer.Option(False, "--book", "-b", help="Book after search"),
 ):
-    """빈 방을 검색하고, --book 옵션 시 예약까지 진행."""
+    """Search available rooms. Use --book to book interactively."""
     if book:
-        # search_and_book: 하나의 브라우저에서 검색 → 선택 → 예약
+        # search_and_book: search → select → book in a single browser
         async def pick_room(rooms: list[Room]) -> Room | None:
             table = Table(title="Available Rooms (Price Center)")
             table.add_column("#", style="cyan")
@@ -44,7 +44,7 @@ def search(
             try:
                 return rooms[int(choice) - 1]
             except (ValueError, IndexError):
-                console.print("[red]잘못된 선택입니다.[/red]")
+                console.print("[red]Invalid selection.[/red]")
                 return None
 
         try:
@@ -68,7 +68,7 @@ def search(
             raise typer.Exit(1)
 
         if not rooms:
-            console.print("[yellow]해당 시간에 빈 방이 없습니다.[/yellow]")
+            console.print("[yellow]No rooms available for the selected time.[/yellow]")
             raise typer.Exit(0)
 
         table = Table(title="Available Rooms (Price Center)")
@@ -104,11 +104,11 @@ def events():
 
 @app.command()
 def config(
-    name: str = typer.Option(None, help="이름"),
-    email: str = typer.Option(None, help="이메일"),
-    attendees: int = typer.Option(None, help="기본 참석자 수"),
+    name: str = typer.Option(None, help="Name"),
+    email: str = typer.Option(None, help="Email"),
+    attendees: int = typer.Option(None, help="Default number of attendees"),
 ):
-    """사용자 설정을 변경한다."""
+    """View or update user settings."""
     cfg = load_config()
     changed = False
 
@@ -124,7 +124,7 @@ def config(
 
     if changed:
         save_config(cfg)
-        console.print("[green]설정이 저장되었습니다.[/green]")
+        console.print("[green]Settings saved.[/green]")
     else:
         for key, value in cfg.items():
             console.print(f"  {key}: {value}")
@@ -132,11 +132,11 @@ def config(
 
 @app.command()
 def status():
-    """현재 세션 상태를 확인한다."""
+    """Check current session status."""
     if is_session_valid():
-        console.print("[green]세션 유효[/green]")
+        console.print("[green]Session valid[/green]")
     else:
-        console.print("[yellow]세션 만료 — 'study-room login' 필요[/yellow]")
+        console.print("[yellow]Session expired — run 'study-room login'[/yellow]")
 
 
 if __name__ == "__main__":

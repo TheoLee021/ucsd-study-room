@@ -32,7 +32,7 @@ class BookingError(Exception):
 
 
 async def _fill_input(page: Page, selector: str, value: str):
-    """입력 필드의 기존 값을 지우고 새 값을 입력한다."""
+    """Clear an input field and fill with a new value."""
     el = page.locator(selector)
     await el.click(click_count=3)
     await el.press(_SELECT_ALL)
@@ -41,7 +41,7 @@ async def _fill_input(page: Page, selector: str, value: str):
 
 
 async def _navigate_to_search(page: Page, date: str, start_time: str, end_time: str):
-    """EMS 메인 → Book Now → 날짜/시간 입력 → Search 클릭."""
+    """EMS main → Book Now → fill date/time → click Search."""
     await page.goto(EMS_URL)
     await page.wait_for_load_state("networkidle")
     await asyncio.sleep(1)
@@ -63,16 +63,16 @@ async def _navigate_to_search(page: Page, date: str, start_time: str, end_time: 
 
 
 async def _check_search_loaded(page: Page) -> bool:
-    """검색 결과가 정상적으로 로드됐는지 확인한다."""
+    """Check if search results loaded successfully."""
     room_results = page.locator(".column-text.available a.location, .column-text.unavailable a.location")
     return await room_results.count() > 0
 
 
 async def _search_with_retry(page: Page, date: str, start_time: str, end_time: str) -> Page:
-    """SAML 인증 → 검색 + 실패 시 재로그인 후 재시도. headed 재로그인 시 새 page 반환."""
+    """SAML auth → search + retry with re-login on failure. Returns None if headed re-login occurred."""
     result = await authenticate(page)
     if result == "relogin_needed":
-        return None  # caller가 새 컨텍스트로 재시도
+        return None  # caller retries with new context
 
     await _navigate_to_search(page, date, start_time, end_time)
 
@@ -82,13 +82,13 @@ async def _search_with_retry(page: Page, date: str, start_time: str, end_time: s
             return None
         await _navigate_to_search(page, date, start_time, end_time)
         if not await _check_search_loaded(page):
-            raise BookingError("검색 결과를 불러올 수 없습니다. 나중에 다시 시도해주세요.")
+            raise BookingError("Failed to load search results. Please try again later.")
 
     return page
 
 
 async def _parse_available_rooms(page: Page, target_rooms: set[str]) -> list[Room]:
-    """+버튼이 visible인 방만 반환."""
+    """Return only rooms whose add-to-cart button is visible."""
     rooms = []
     for room_name in sorted(target_rooms):
         add_btn = page.locator(f'i.book-add-to-cart[aria-label*="{room_name}"]')
@@ -118,16 +118,16 @@ def _format_time(time_24h: str) -> str:
 
 
 async def _open_and_search(playwright, date: str, start_time: str, end_time: str, target_rooms: set[str]) -> list[Room]:
-    """헤드리스 브라우저로 검색. headed 재로그인 발생 시 재귀 재시도."""
+    """Headless browser search. Recursively retries if headed re-login occurs."""
     context = await get_authenticated_context(playwright, headless=True)
     if context is None:
-        raise SessionExpiredError("세션이 만료됐습니다. 'study-room login'을 실행해주세요.")
+        raise SessionExpiredError("Session expired. Please run 'study-room login'.")
 
     page = await context.new_page()
     try:
         page = await _search_with_retry(page, date, start_time, end_time)
         if page is None:
-            # headed 재로그인 완료 → 새 컨텍스트로 재시도
+            # Headed re-login complete → retry with new context
             return await _open_and_search(playwright, date, start_time, end_time, target_rooms)
         return await _parse_available_rooms(page, target_rooms)
     finally:
@@ -136,7 +136,7 @@ async def _open_and_search(playwright, date: str, start_time: str, end_time: str
 
 
 async def search_rooms(date: str, start_time: str, end_time: str) -> list[Room]:
-    """EMS에서 빈 방을 검색한다. (단독 사용 — 브라우저를 열고 닫는다)"""
+    """Search for available rooms on EMS. Opens and closes its own browser."""
     config = load_config()
     target_rooms = set(config["rooms"])
     formatted_date = _format_date(date)
@@ -148,13 +148,13 @@ async def search_rooms(date: str, start_time: str, end_time: str) -> list[Room]:
 
 
 async def _open_search_and_book(playwright, date: str, start_time: str, end_time: str, room_name: str, config: dict) -> str:
-    """헤드리스 브라우저로 검색+예약. headed 재로그인 발생 시 재귀 재시도."""
+    """Headless browser search + book. Recursively retries if headed re-login occurs."""
     formatted_start = _format_time(start_time.replace("/", ":")) if "/" in start_time else start_time
     formatted_end = _format_time(end_time.replace("/", ":")) if "/" in end_time else end_time
 
     context = await get_authenticated_context(playwright, headless=True)
     if context is None:
-        raise SessionExpiredError("세션이 만료됐습니다. 'study-room login'을 실행해주세요.")
+        raise SessionExpiredError("Session expired. Please run 'study-room login'.")
 
     page = await context.new_page()
     try:
@@ -162,10 +162,10 @@ async def _open_search_and_book(playwright, date: str, start_time: str, end_time
         if page is None:
             return await _open_search_and_book(playwright, date, start_time, end_time, room_name, config)
 
-        # 방 available 확인 + 클릭
+        # Check room availability + click
         add_btn = page.locator(f'i.book-add-to-cart[aria-label*="{room_name}"]')
         if await add_btn.count() == 0 or not await add_btn.first.is_visible():
-            raise BookingError(f"'{room_name}'은 해당 시간에 예약할 수 없습니다.")
+            raise BookingError(f"'{room_name}' is not available for the selected time.")
         await add_btn.click()
         await asyncio.sleep(1)
 
@@ -184,17 +184,17 @@ async def _open_search_and_book(playwright, date: str, start_time: str, end_time
         await page.locator("button:has-text('Create Reservation')").first.click()
         await asyncio.sleep(5)
 
-        return f"{room_name} 예약 완료"
+        return f"Booking confirmed: {room_name}"
     finally:
         if page and page.context.browser.is_connected():
             await page.context.browser.close()
 
 
 async def book_room(date: str, start_time: str, end_time: str, room_name: str) -> str:
-    """검색 → 방 선택 → 예약까지 하나의 브라우저에서 진행한다."""
+    """Search → select room → book in a single browser session."""
     config = load_config()
     if room_name not in config["rooms"]:
-        raise BookingError(f"'{room_name}'은 지원하는 방이 아닙니다.")
+        raise BookingError(f"'{room_name}' is not a supported room.")
 
     formatted_date = _format_date(date)
     formatted_start = _format_time(start_time)
@@ -205,10 +205,10 @@ async def book_room(date: str, start_time: str, end_time: str, room_name: str) -
 
 
 async def _open_search_and_book_interactive(playwright, date: str, start_time: str, end_time: str, target_rooms: set[str], config: dict, room_selector=None) -> str:
-    """헤드리스 브라우저로 검색→선택→예약. headed 재로그인 발생 시 재귀 재시도."""
+    """Headless browser search → select → book. Recursively retries if headed re-login occurs."""
     context = await get_authenticated_context(playwright, headless=True)
     if context is None:
-        raise SessionExpiredError("세션이 만료됐습니다. 'study-room login'을 실행해주세요.")
+        raise SessionExpiredError("Session expired. Please run 'study-room login'.")
 
     page = await context.new_page()
     try:
@@ -219,12 +219,12 @@ async def _open_search_and_book_interactive(playwright, date: str, start_time: s
         rooms = await _parse_available_rooms(page, target_rooms)
 
         if not rooms:
-            raise BookingError("해당 시간에 빈 방이 없습니다.")
+            raise BookingError("No rooms available for the selected time.")
 
         if room_selector:
             selected = await room_selector(rooms)
             if selected is None:
-                return "예약 취소됨."
+                return "Booking cancelled."
         else:
             selected = rooms[0]
 
@@ -247,7 +247,7 @@ async def _open_search_and_book_interactive(playwright, date: str, start_time: s
         await page.locator("button:has-text('Create Reservation')").first.click()
         await asyncio.sleep(5)
 
-        return f"{selected.name} 예약 완료 ({date} {start_time}-{end_time})"
+        return f"Booking confirmed: {selected.name} ({date} {start_time}-{end_time})"
     finally:
         if page and page.context.browser.is_connected():
             await page.context.browser.close()
@@ -255,11 +255,11 @@ async def _open_search_and_book_interactive(playwright, date: str, start_time: s
 
 async def search_and_book(date: str, start_time: str, end_time: str, room_selector=None) -> str:
     """
-    하나의 브라우저 세션에서 검색 → 유저 선택 → 예약을 진행한다.
+    Search → user selection → book in a single browser session.
 
     Args:
-        room_selector: async callable(rooms) -> Room 또는 None
-            유저에게 방을 선택받는 콜백. None이면 첫 번째 방을 선택.
+        room_selector: async callable(rooms) -> Room or None
+            Callback for user to select a room. If None, selects the first room.
     """
     config = load_config()
     target_rooms = set(config["rooms"])
@@ -275,7 +275,7 @@ MY_EVENTS_URL = "https://ucsdevents.emscloudservice.com/web/BrowseReservations.a
 
 
 async def _open_and_get_events(playwright) -> list[Reservation]:
-    """헤드리스 브라우저로 MY EVENTS 페이지에서 현재 예약 목록을 파싱한다."""
+    """Parse current reservations from the MY EVENTS page via headless browser."""
     context = await get_authenticated_context(playwright, headless=True)
     if context is None:
         raise SessionExpiredError("Session expired. Please run 'study-room login' first.")
@@ -323,6 +323,6 @@ async def _open_and_get_events(playwright) -> list[Reservation]:
 
 
 async def my_events() -> list[Reservation]:
-    """현재 예약 목록을 조회한다."""
+    """List current reservations."""
     async with async_playwright() as p:
         return await _open_and_get_events(p)

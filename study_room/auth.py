@@ -62,43 +62,43 @@ def is_session_valid(path: Path = SESSION_PATH) -> bool:
 
 
 async def login(username: str, password: str, session_path: Path = SESSION_PATH) -> list:
-    """SSO 로그인 + Duo Push 인증 후 쿠키를 저장한다."""
+    """SSO login + Duo Push authentication. Saves cookies on success."""
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=False, channel="chrome")
         context = await browser.new_context()
         page = await context.new_page()
 
-        # 1. SAML 인증 페이지로 직접 이동 → UCSD SSO 리다이렉트
+        # 1. Navigate to SAML auth page → redirects to UCSD SSO
         await page.goto(SAML_URL)
         await page.wait_for_load_state("networkidle")
 
-        # 2. UCSD SSO 로그인 — username + password
+        # 2. UCSD SSO login — username + password
         await page.wait_for_selector("#ssousername", timeout=15000)
         await page.locator("#ssousername").fill(username)
         await page.locator("#ssopassword").fill(password)
         await page.locator("button[type='submit']").click()
 
-        # 3. Duo Push 대기 — EMS 페이지로 돌아오면 인증 완료
-        print("Duo Push가 전송되었습니다. 폰에서 승인해주세요...")
+        # 3. Wait for Duo Push — authentication complete when redirected to EMS
+        print("Duo Push sent. Please approve on your phone...")
         await page.wait_for_url("**/web/**", timeout=DUO_TIMEOUT_MS)
 
-        # 4. credentials를 keychain에 저장
+        # 4. Save credentials to keychain
         save_credentials(username, password)
 
-        # 5. storage state 전체 저장 (쿠키 + localStorage + sessionStorage)
+        # 5. Save full storage state (cookies + localStorage + sessionStorage)
         cookies = await context.cookies()
         save_session(cookies, session_path)
 
         storage_state_path = session_path.parent / "storage_state.json"
         await context.storage_state(path=str(storage_state_path))
-        print(f"로그인 성공! {len(cookies)}개 쿠키 + storage state 저장됨.")
+        print(f"Login successful! {len(cookies)} cookies + storage state saved.")
 
         await browser.close()
         return cookies
 
 
 async def get_authenticated_context(playwright, session_path: Path = SESSION_PATH, headless: bool = True, channel: str | None = "chrome"):
-    """저장된 storage state로 인증된 브라우저 컨텍스트를 반환한다."""
+    """Return an authenticated browser context using saved storage state."""
     if not is_session_valid(session_path):
         return None
 
@@ -119,7 +119,7 @@ async def get_authenticated_context(playwright, session_path: Path = SESSION_PAT
 
 
 async def _headed_login_and_save(session_path: Path = SESSION_PATH):
-    """SSO 만료 시 headed 브라우저로 재로그인. Keychain → 자동입력, 실패 → 수동입력."""
+    """Re-login via headed browser when SSO expires. Auto-fills from keychain if available."""
     import asyncio
 
     creds = load_credentials()
@@ -136,55 +136,55 @@ async def _headed_login_and_save(session_path: Path = SESSION_PATH):
 
         if creds:
             username, password = creds
-            print("Keychain에서 credentials 로드 → 자동 입력 중...")
+            print("Loaded credentials from keychain. Auto-filling...")
             await page.locator("#ssousername").fill(username)
             await page.locator("#ssopassword").fill(password)
             await page.locator("button[type='submit']").click()
         else:
-            print("Keychain에 credentials 없음 → 브라우저에서 직접 로그인해주세요.")
+            print("No credentials in keychain. Please log in manually in the browser.")
 
-        print("Duo Push가 전송되었습니다. 폰에서 승인해주세요...")
+        print("Duo Push sent. Please approve on your phone...")
         await page.wait_for_url("**/web/**", timeout=DUO_TIMEOUT_MS)
 
-        # 세션 저장
+        # Save session
         cookies = await context.cookies()
         save_session(cookies, session_path)
         storage_state_path = session_path.parent / "storage_state.json"
         await context.storage_state(path=str(storage_state_path))
-        print("재로그인 성공! 세션 갱신됨.")
+        print("Re-login successful! Session renewed.")
 
         await browser.close()
 
 
 async def authenticate(page, session_path: Path = SESSION_PATH):
-    """SAML 인증. SSO 유효 시 자동 통과, 만료 시 headed 브라우저로 Duo 인증."""
+    """SAML authentication. Auto-passes if SSO is valid, opens headed browser for Duo if expired."""
     import asyncio
 
-    print("SAML 인증 중...")
+    print("Authenticating via SAML...")
 
     await page.goto(SAML_URL)
     await page.wait_for_load_state("networkidle")
     await asyncio.sleep(2)
 
-    # SSO 로그인 페이지가 나왔는지 확인
+    # Check if SSO login page appeared
     sso_form = page.locator("#ssousername")
     if await sso_form.count() > 0:
-        # SSO 만료 — headed 브라우저로 Duo 인증
-        print("SSO 세션 만료. headed 브라우저로 로그인 진행...")
+        # SSO expired — open headed browser for Duo auth
+        print("SSO session expired. Opening browser for login...")
         await page.context.browser.close()
         await _headed_login_and_save(session_path)
         return "relogin_needed"
 
-    # SSO 유효 → 자동으로 EMS 리다이렉트
+    # SSO valid → auto-redirects to EMS
     await page.wait_for_url("**/web/**", timeout=15000)
 
-    # storage state 갱신
+    # Refresh storage state
     context = page.context
     cookies = await context.cookies()
     save_session(cookies, session_path)
     storage_state_path = session_path.parent / "storage_state.json"
     await context.storage_state(path=str(storage_state_path))
-    print("인증 완료.")
+    print("Authentication complete.")
 
 
 class SessionExpiredError(Exception):
