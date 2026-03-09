@@ -44,7 +44,13 @@ ucsd-study-room MCP 서버를 설치해줘:
 
 `내 이름`과 `MY_EMAIL@ucsd.edu`를 본인의 이름과 UCSD 이메일로 바꾼 뒤 붙여넣으세요. AI 어시스턴트가 나머지를 처리합니다.
 
-## 설치
+설정이 끝나면 AI 어시스턴트에게 자연어로 요청하세요:
+
+- "내일 오후 2시부터 4시까지 빈 스터디룸 검색해줘"
+- "3월 11일 오후 3시부터 5시까지 Price Center Study Room 3 예약해줘"
+- "내 예약 목록 보여줘"
+
+## 수동 설치
 
 ```bash
 pip install ucsd-study-room
