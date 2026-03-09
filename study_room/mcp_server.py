@@ -21,34 +21,34 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="search_rooms",
-            description="UCSD Price Center Study Room 1~8에서 빈 방을 검색한다.",
+            description="Search for available UCSD Price Center Study Rooms (Rooms 1-8) by date and time range.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "date": {"type": "string", "description": "날짜 (YYYY-MM-DD)"},
-                    "start_time": {"type": "string", "description": "시작 시간 (HH:MM, 24h)"},
-                    "end_time": {"type": "string", "description": "종료 시간 (HH:MM, 24h)"},
+                    "date": {"type": "string", "description": "Date (YYYY-MM-DD)"},
+                    "start_time": {"type": "string", "description": "Start time (HH:MM, 24h)"},
+                    "end_time": {"type": "string", "description": "End time (HH:MM, 24h)"},
                 },
                 "required": ["date", "start_time", "end_time"],
             },
         ),
         Tool(
             name="book_room",
-            description="특정 스터디룸을 예약한다. search_rooms로 먼저 빈 방을 확인한 뒤 사용.",
+            description="Book a specific study room. Use search_rooms first to find available rooms.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "date": {"type": "string", "description": "날짜 (YYYY-MM-DD)"},
-                    "start_time": {"type": "string", "description": "시작 시간 (HH:MM)"},
-                    "end_time": {"type": "string", "description": "종료 시간 (HH:MM)"},
-                    "room_name": {"type": "string", "description": "방 이름 (예: Price Center Study Room 2)"},
+                    "date": {"type": "string", "description": "Date (YYYY-MM-DD)"},
+                    "start_time": {"type": "string", "description": "Start time (HH:MM)"},
+                    "end_time": {"type": "string", "description": "End time (HH:MM)"},
+                    "room_name": {"type": "string", "description": "Room name (e.g. Price Center Study Room 2)"},
                 },
                 "required": ["date", "start_time", "end_time", "room_name"],
             },
         ),
         Tool(
             name="login",
-            description="UCSD SSO + Duo Push 로그인. 세션 만료 시 사용. 브라우저가 열리고 Duo 승인이 필요.",
+            description="Authenticate via UCSD SSO + Duo Push. Use when session is expired. Opens a browser and requires Duo approval.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -69,11 +69,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 arguments["date"], arguments["start_time"], arguments["end_time"]
             )
             if not rooms:
-                return [TextContent(type="text", text="해당 시간에 빈 방이 없습니다.")]
-            lines = [f"빈 방 {len(rooms)}개:"]
+                return [TextContent(type="text", text="No rooms available for the given time.")]
+            lines = [f"{len(rooms)} room(s) available:"]
             for i, r in enumerate(rooms, 1):
                 lines.append(f"  {i}. {r.name}")
-            lines.append("\nbook_room 도구로 원하는 방을 예약하세요.")
+            lines.append("\nUse the book_room tool to reserve a room.")
             return [TextContent(type="text", text="\n".join(lines))]
 
         elif name == "book_room":
@@ -87,19 +87,19 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "login":
             await auth_login(arguments["username"], arguments["password"])
-            return [TextContent(type="text", text="로그인 성공! 세션이 저장되었습니다.")]
+            return [TextContent(type="text", text="Login successful. Session saved.")]
 
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
     except SessionExpiredError as e:
-        return [TextContent(type="text", text=f"세션 만료: {e}\nlogin 도구로 먼저 로그인해주세요.")]
+        return [TextContent(type="text", text=f"Session expired: {e}\nPlease use the login tool first.")]
     except DateUnavailableError as e:
         return [TextContent(type="text", text=str(e))]
     except BookingError as e:
-        return [TextContent(type="text", text=f"예약 실패: {e}")]
+        return [TextContent(type="text", text=f"Booking failed: {e}")]
     except Exception as e:
-        return [TextContent(type="text", text=f"오류 발생: {e}")]
+        return [TextContent(type="text", text=f"Error: {e}")]
 
 
 async def main():
