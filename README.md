@@ -36,8 +36,8 @@ If you're using an MCP-compatible AI assistant (Claude Code, Codex CLI, etc.), s
 
 ```
 Install the ucsd-study-room MCP server:
-1. Run: pip install ucsd-study-room && playwright install chromium
-2. Add "study-room" to your MCP config: {"command": "python", "args": ["-m", "study_room.mcp_server"]}
+1. Run: uv tool install ucsd-study-room && uvx --from ucsd-study-room playwright install chromium
+2. Add "study-room" to your MCP config: {"command": "uvx", "args": ["--from", "ucsd-study-room", "study-room-mcp"]}
 3. Run: study-room config --name "MY NAME" --email "MY_EMAIL@ucsd.edu"
 4. Run: study-room login
 ```
@@ -53,9 +53,28 @@ Once set up, just ask your AI assistant in natural language:
 ## Manual Installation
 
 ```bash
+uv tool install ucsd-study-room
+uvx --from ucsd-study-room playwright install chromium
+```
+
+<details>
+<summary>Alternative: pip install</summary>
+
+```bash
 pip install ucsd-study-room
 playwright install chromium
 ```
+
+If using pip, configure the MCP server with:
+```json
+{
+  "study-room": {
+    "command": "study-room-mcp"
+  }
+}
+```
+
+</details>
 
 ## Initial Setup
 
@@ -80,8 +99,8 @@ The MCP server communicates over stdio and works with any MCP-compatible client.
 ```json
 {
   "study-room": {
-    "command": "python",
-    "args": ["-m", "study_room.mcp_server"]
+    "command": "uvx",
+    "args": ["--from", "ucsd-study-room", "study-room-mcp"]
   }
 }
 ```
