@@ -15,6 +15,14 @@ class Room:
     available: bool
 
 
+@dataclass
+class Reservation:
+    date: str
+    room: str
+    status: str
+    reservation_id: str
+
+
 class DateUnavailableError(Exception):
     pass
 
@@ -261,3 +269,60 @@ async def search_and_book(date: str, start_time: str, end_time: str, room_select
 
     async with async_playwright() as p:
         return await _open_search_and_book_interactive(p, formatted_date, formatted_start, formatted_end, target_rooms, config, room_selector)
+
+
+MY_EVENTS_URL = "https://ucsdevents.emscloudservice.com/web/BrowseReservations.aspx"
+
+
+async def _open_and_get_events(playwright) -> list[Reservation]:
+    """헤드리스 브라우저로 MY EVENTS 페이지에서 현재 예약 목록을 파싱한다."""
+    context = await get_authenticated_context(playwright, headless=True)
+    if context is None:
+        raise SessionExpiredError("Session expired. Please run 'study-room login' first.")
+
+    page = await context.new_page()
+    try:
+        await page.goto(MY_EVENTS_URL)
+        await page.wait_for_load_state("networkidle")
+
+        result = await authenticate(page)
+        if result == "relogin_needed":
+            return await _open_and_get_events(playwright)
+
+        await page.goto(MY_EVENTS_URL)
+        await page.wait_for_load_state("networkidle")
+        await asyncio.sleep(2)
+
+        rows = page.locator("table.table tbody tr")
+        count = await rows.count()
+
+        reservations = []
+        for i in range(count):
+            row = rows.nth(i)
+            cols = row.locator("td")
+            if await cols.count() < 7:
+                continue
+
+            date_text = (await cols.nth(1).inner_text()).strip().split("/")[0].strip()
+            location_text = (await cols.nth(2).inner_text()).strip()
+            room = location_text.split(" - ")[-1].strip() if " - " in location_text else location_text
+            reservation_id = (await cols.nth(5).inner_text()).strip()
+            status = (await cols.nth(6).inner_text()).strip()
+
+            reservations.append(Reservation(
+                date=date_text,
+                room=room,
+                status=status,
+                reservation_id=reservation_id,
+            ))
+
+        return reservations
+    finally:
+        if page and page.context.browser.is_connected():
+            await page.context.browser.close()
+
+
+async def my_events() -> list[Reservation]:
+    """현재 예약 목록을 조회한다."""
+    async with async_playwright() as p:
+        return await _open_and_get_events(p)

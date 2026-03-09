@@ -100,6 +100,7 @@ Once configured, you can use natural language to manage bookings:
 |------|-------------|
 | `search_rooms` | Search for available rooms by date and time range |
 | `book_room` | Book a specific room (use after `search_rooms`) |
+| `my_events` | List current reservations with date, room, status, and ID |
 | `login` | Authenticate via UCSD SSO + Duo Push |
 
 ## CLI Usage
@@ -111,6 +112,7 @@ Once configured, you can use natural language to manage bookings:
 | `study-room login` | SSO login with Duo Push (opens browser for first-time auth) |
 | `study-room search` | Search available rooms with `--date`, `--start`, `--end` options |
 | `study-room search --book` | Search and book a room interactively |
+| `study-room events` | Show current reservations |
 | `study-room config` | View or set user info (`--name`, `--email`, `--attendees`) |
 | `study-room status` | Check whether the current session is valid |
 

@@ -7,6 +7,7 @@ from mcp.types import TextContent, Tool
 from study_room.booking import (
     search_rooms,
     book_room,
+    my_events,
     SessionExpiredError,
     DateUnavailableError,
     BookingError,
@@ -47,6 +48,15 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="my_events",
+            description="List current reservations. Returns upcoming bookings with date, room, status, and reservation ID.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
+        Tool(
             name="login",
             description="Authenticate via UCSD SSO + Duo Push. Use when session is expired. Opens a browser and requires Duo approval.",
             inputSchema={
@@ -84,6 +94,15 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 arguments["room_name"],
             )
             return [TextContent(type="text", text=result)]
+
+        elif name == "my_events":
+            reservations = await my_events()
+            if not reservations:
+                return [TextContent(type="text", text="No current reservations.")]
+            lines = [f"{len(reservations)} reservation(s):"]
+            for r in reservations:
+                lines.append(f"  - {r.date} | {r.room} | {r.status} (ID: {r.reservation_id})")
+            return [TextContent(type="text", text="\n".join(lines))]
 
         elif name == "login":
             await auth_login(arguments["username"], arguments["password"])
