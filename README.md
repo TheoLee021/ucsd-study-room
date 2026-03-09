@@ -44,7 +44,13 @@ Install the ucsd-study-room MCP server:
 
 Replace `MY NAME` and `MY_EMAIL@ucsd.edu` with your actual name and UCSD email before pasting. Your AI assistant will handle the rest.
 
-## Installation
+Once set up, just ask your AI assistant in natural language:
+
+- "Search for available study rooms tomorrow from 2pm to 4pm"
+- "Book Price Center Study Room 3 on March 11 from 3pm to 5pm"
+- "Show my current reservations"
+
+## Manual Installation
 
 ```bash
 pip install ucsd-study-room
