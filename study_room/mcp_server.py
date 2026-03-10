@@ -8,6 +8,8 @@ from study_room.booking import (
     search_rooms,
     book_room,
     my_events,
+    cancel_reservation,
+    CANCEL_REASONS,
     SessionExpiredError,
     DateUnavailableError,
     BookingError,
@@ -57,6 +59,29 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="cancel_reservation",
+            description=(
+                "Cancel a study room reservation. Requires date and reason. "
+                "Ask the user to choose a cancel reason before calling. "
+                "Valid reasons: Bad Weather, Changed Date, Changed Location, "
+                "Lack of Funding, Lack of Interest, Lack of Resources, "
+                "Lack of Time to Plan, Other. "
+                "If multiple reservations on the same date, specify room_name."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "date": {"type": "string", "description": "Date (YYYY-MM-DD)"},
+                    "reason": {
+                        "type": "string",
+                        "description": "Cancel reason. Must be one of: Bad Weather, Changed Date, Changed Location, Lack of Funding, Lack of Interest, Lack of Resources, Lack of Time to Plan, Other",
+                    },
+                    "room_name": {"type": "string", "description": "Room name to disambiguate if multiple reservations on same date (optional)"},
+                },
+                "required": ["date", "reason"],
+            },
+        ),
+        Tool(
             name="login",
             description="Authenticate via UCSD SSO + Duo Push. Use when session is expired. Opens a browser and requires Duo approval.",
             inputSchema={
@@ -103,6 +128,24 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             for r in reservations:
                 lines.append(f"  - {r.date} | {r.room} | {r.status} (ID: {r.reservation_id})")
             return [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "cancel_reservation":
+            result = await cancel_reservation(
+                arguments["date"],
+                arguments.get("room_name"),
+                arguments["reason"],
+            )
+
+            if result.status == "cancelled":
+                return [TextContent(type="text", text=result.message)]
+            elif result.status == "needs_selection":
+                lines = [result.message]
+                for r in result.reservations:
+                    lines.append(f"  - {r.room} | {r.status} (ID: {r.reservation_id})")
+                lines.append("\nCall cancel_reservation again with 'room_name' to specify which one.")
+                return [TextContent(type="text", text="\n".join(lines))]
+            else:
+                return [TextContent(type="text", text=result.message)]
 
         elif name == "login":
             await auth_login(arguments["username"], arguments["password"])
