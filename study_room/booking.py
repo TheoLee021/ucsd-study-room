@@ -23,6 +23,25 @@ class Reservation:
     reservation_id: str
 
 
+CANCEL_REASONS = [
+    "Bad Weather",
+    "Changed Date",
+    "Changed Location",
+    "Lack of Funding",
+    "Lack of Interest",
+    "Lack of Resources",
+    "Lack of Time to Plan",
+    "Other",
+]
+
+
+@dataclass
+class CancelResult:
+    status: str  # "cancelled", "needs_selection", "error"
+    message: str
+    reservations: list[Reservation] | None = None
+
+
 class DateUnavailableError(Exception):
     pass
 
@@ -326,3 +345,118 @@ async def my_events() -> list[Reservation]:
     """List current reservations."""
     async with async_playwright() as p:
         return await _open_and_get_events(p)
+
+
+async def _open_and_cancel(playwright, date: str, room_name: str | None, reason: str) -> CancelResult:
+    """Navigate My Events → find reservation → cancel. Recursively retries on headed re-login."""
+    context = await get_authenticated_context(playwright, headless=True)
+    if context is None:
+        raise SessionExpiredError("Session expired. Please run 'study-room login' first.")
+
+    page = await context.new_page()
+    try:
+        await page.goto(MY_EVENTS_URL)
+        await page.wait_for_load_state("networkidle")
+
+        result = await authenticate(page)
+        if result == "relogin_needed":
+            return await _open_and_cancel(playwright, date, room_name, reason)
+
+        await page.goto(MY_EVENTS_URL)
+        await page.wait_for_load_state("networkidle")
+        await asyncio.sleep(2)
+
+        # Parse rows and find matching reservations
+        rows = page.locator("table.table tbody tr")
+        count = await rows.count()
+
+        matching_rows = []
+        for i in range(count):
+            row = rows.nth(i)
+            cols = row.locator("td")
+            if await cols.count() < 7:
+                continue
+
+            date_text = (await cols.nth(1).inner_text()).strip().split("/")[0].strip()
+            location_text = (await cols.nth(2).inner_text()).strip()
+            room = location_text.split(" - ")[-1].strip() if " - " in location_text else location_text
+            reservation_id = (await cols.nth(5).inner_text()).strip()
+            status = (await cols.nth(6).inner_text()).strip()
+
+            if date in date_text:
+                if room_name and room_name not in room:
+                    continue
+                matching_rows.append({
+                    "index": i,
+                    "reservation": Reservation(date=date_text, room=room, status=status, reservation_id=reservation_id),
+                })
+
+        if not matching_rows:
+            return CancelResult(status="error", message=f"No reservation found for {date}.")
+
+        if len(matching_rows) > 1 and room_name is None:
+            return CancelResult(
+                status="needs_selection",
+                message=f"Multiple reservations found for {date}. Please specify a room.",
+                reservations=[m["reservation"] for m in matching_rows],
+            )
+
+        target = matching_rows[0]
+
+        # Click name link in cols[0] → navigate to ReservationSummary
+        target_row = rows.nth(target["index"])
+        name_link = target_row.locator("td").nth(0).locator("a")
+        await name_link.click()
+        await page.wait_for_load_state("networkidle")
+        await asyncio.sleep(2)
+
+        # Check if Cancel Reservation button exists
+        cancel_link = page.locator("a:has-text('Cancel Reservation')")
+        if await cancel_link.count() == 0:
+            return CancelResult(
+                status="error",
+                message="Cannot cancel this reservation (cancel option not available).",
+            )
+
+        # Execute cancellation
+        await cancel_link.click()
+        await asyncio.sleep(2)
+
+        # Select cancel reason from dropdown
+        await page.select_option("select", label=reason)
+        await asyncio.sleep(1)
+
+        # Click "Yes, Cancel Reservation"
+        await page.locator("button:has-text('Yes, Cancel Reservation')").click()
+        await asyncio.sleep(3)
+
+        res = target["reservation"]
+        return CancelResult(
+            status="cancelled",
+            message=f"Cancelled: {res.room} on {res.date} (ID: {res.reservation_id}).",
+        )
+    finally:
+        if page and page.context.browser.is_connected():
+            await page.context.browser.close()
+
+
+def _format_date_for_match(date_iso: str) -> str:
+    """YYYY-MM-DD → 'Mar 13, 2026' for substring matching against EMS date text."""
+    from datetime import datetime as _dt
+    dt = _dt.strptime(date_iso, "%Y-%m-%d")
+    return f"{dt.strftime('%b')} {dt.day}, {dt.year}"
+
+
+async def cancel_reservation(date: str, room_name: str | None = None, reason: str = "Changed Date") -> CancelResult:
+    """Cancel a reservation by date. Optionally filter by room_name.
+
+    Args:
+        date: YYYY-MM-DD format (from CLI --date or MCP) or raw date text (from interactive picker).
+    """
+    # ISO format (YYYY-MM-DD) → convert to 'Mar 13, 2026'; otherwise pass through as-is
+    if len(date) == 10 and date[4:5] == "-" and date[7:8] == "-":
+        match_date = _format_date_for_match(date)
+    else:
+        match_date = date
+    async with async_playwright() as p:
+        return await _open_and_cancel(p, match_date, room_name, reason)

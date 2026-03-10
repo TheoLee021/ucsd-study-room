@@ -5,7 +5,7 @@ from rich.table import Table
 
 from study_room.config import load_config, save_config, CONFIG_PATH
 from study_room.auth import login as auth_login, is_session_valid, SessionExpiredError
-from study_room.booking import search_rooms, search_and_book, my_events, Room, Reservation, BookingError
+from study_room.booking import search_rooms, search_and_book, my_events, cancel_reservation, Room, Reservation, CancelResult, CANCEL_REASONS, BookingError
 
 app = typer.Typer(help="UCSD Study Room Booking Tool")
 console = Console()
@@ -100,6 +100,104 @@ def events():
     for r in reservations:
         table.add_row(r.date, r.room, r.status, r.reservation_id)
     console.print(table)
+
+
+@app.command()
+def cancel(
+    date: str = typer.Option(None, help="Date (YYYY-MM-DD)"),
+    reason: str = typer.Option(None, help="Cancel reason"),
+):
+    """Cancel a reservation. Interactive selection if no date given."""
+    # Step 1: If no date, show all events and let user pick
+    if date is None:
+        try:
+            reservations = asyncio.run(my_events())
+        except SessionExpiredError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1)
+
+        if not reservations:
+            console.print("[yellow]No current reservations.[/yellow]")
+            raise typer.Exit(0)
+
+        table = Table(title="My Reservations")
+        table.add_column("#", style="cyan")
+        table.add_column("Date", style="green")
+        table.add_column("Room", style="green")
+        table.add_column("Status", style="yellow")
+        table.add_column("ID", style="dim")
+        for i, r in enumerate(reservations, 1):
+            table.add_row(str(i), r.date, r.room, r.status, r.reservation_id)
+        console.print(table)
+
+        choice = typer.prompt(f"Select reservation to cancel [1-{len(reservations)}/n]", default="n")
+        if choice.lower() == "n":
+            console.print("Cancelled.")
+            raise typer.Exit(0)
+        try:
+            selected = reservations[int(choice) - 1]
+        except (ValueError, IndexError):
+            console.print("[red]Invalid selection.[/red]")
+            raise typer.Exit(1)
+
+        date_for_cancel = selected.date  # raw date text from My Events table
+        room_for_cancel = selected.room
+    else:
+        date_for_cancel = date
+        room_for_cancel = None
+
+    # Step 2: If no reason, show reason picker
+    if reason is None:
+        console.print("\n[bold]Cancel Reason:[/bold]")
+        for i, r in enumerate(CANCEL_REASONS, 1):
+            console.print(f"  {i}. {r}")
+        reason_choice = typer.prompt(f"Select reason [1-{len(CANCEL_REASONS)}]")
+        try:
+            reason = CANCEL_REASONS[int(reason_choice) - 1]
+        except (ValueError, IndexError):
+            console.print("[red]Invalid selection.[/red]")
+            raise typer.Exit(1)
+
+    # Step 3: Execute cancel
+    try:
+        result = asyncio.run(cancel_reservation(date_for_cancel, room_for_cancel, reason))
+    except SessionExpiredError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except BookingError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    if result.status == "cancelled":
+        console.print(f"[green]{result.message}[/green]")
+    elif result.status == "needs_selection":
+        console.print(f"[yellow]{result.message}[/yellow]")
+        table = Table(title="Matching Reservations")
+        table.add_column("#", style="cyan")
+        table.add_column("Date", style="green")
+        table.add_column("Room", style="green")
+        table.add_column("Status", style="yellow")
+        for i, r in enumerate(result.reservations, 1):
+            table.add_row(str(i), r.date, r.room, r.status)
+        console.print(table)
+
+        choice = typer.prompt(f"Select [1-{len(result.reservations)}/n]", default="n")
+        if choice.lower() == "n":
+            console.print("Cancelled.")
+            raise typer.Exit(0)
+        try:
+            selected = result.reservations[int(choice) - 1]
+        except (ValueError, IndexError):
+            console.print("[red]Invalid selection.[/red]")
+            raise typer.Exit(1)
+
+        result2 = asyncio.run(cancel_reservation(date_for_cancel, selected.room, reason))
+        if result2.status == "cancelled":
+            console.print(f"[green]{result2.message}[/green]")
+        else:
+            console.print(f"[red]{result2.message}[/red]")
+    elif result.status == "error":
+        console.print(f"[red]{result.message}[/red]")
 
 
 @app.command()
