@@ -11,6 +11,7 @@ Automate UCSD Price Center study room booking with your AI assistant or from the
 
 - **Search** available rooms by date and time
 - **Book** a room instantly
+- **Cancel** reservations with a reason
 - **View** your current reservations
 
 Works with Claude Code, Codex CLI, Gemini CLI, Cursor, and any MCP-compatible client.
@@ -33,6 +34,7 @@ Once set up, just ask your AI assistant in natural language:
 
 - "Search for available study rooms tomorrow from 2pm to 4pm"
 - "Book Price Center Study Room on March 11 from 3pm to 5pm"
+- "Cancel my reservation on March 13"
 - "Show my current reservations"
 
 ## Requirements
@@ -117,16 +119,18 @@ Once configured, you can use natural language to manage bookings:
 
 - "Search for available study rooms tomorrow from 2pm to 4pm"
 - "Book Price Center Study Room 3 on March 11 from 3pm to 5pm"
+- "Cancel my reservation on March 13"
 - "Are there any rooms open this Friday afternoon?"
 
 ### Available MCP Tools
 
-| Tool           | Description                                               |
-| -------------- | --------------------------------------------------------- |
-| `search_rooms` | Search for available rooms by date and time range         |
-| `book_room`    | Book a specific room (use after `search_rooms`)           |
-| `my_events`    | List current reservations with date, room, status, and ID |
-| `login`        | Authenticate via UCSD SSO + Duo Push                      |
+| Tool                   | Description                                               |
+| ---------------------- | --------------------------------------------------------- |
+| `search_rooms`         | Search for available rooms by date and time range         |
+| `book_room`            | Book a specific room (use after `search_rooms`)           |
+| `cancel_reservation`   | Cancel a reservation by date with a cancel reason         |
+| `my_events`            | List current reservations with date, room, status, and ID |
+| `login`                | Authenticate via UCSD SSO + Duo Push                      |
 
 ## CLI Usage
 
@@ -137,6 +141,7 @@ Once configured, you can use natural language to manage bookings:
 | `study-room login`         | SSO login with Duo Push (opens browser for first-time auth)      |
 | `study-room search`        | Search available rooms with `--date`, `--start`, `--end` options |
 | `study-room search --book` | Search and book a room interactively                             |
+| `study-room cancel`        | Cancel a reservation interactively or with `--date`, `--reason`  |
 | `study-room events`        | Show current reservations                                        |
 | `study-room config`        | View or set user info (`--name`, `--email`, `--attendees`)       |
 | `study-room status`        | Check whether the current session is valid                       |
@@ -155,6 +160,14 @@ study-room search --date 2026-03-11 --start 15:00 --end 17:00
 study-room search --date 2026-03-11 --start 15:00 --end 17:00 --book
 ```
 
+**Cancel a reservation:**
+
+```bash
+study-room cancel                              # interactive selection
+study-room cancel --date 2026-03-13            # by date (prompts for reason)
+study-room cancel --date 2026-03-13 --reason "Changed Date"
+```
+
 ## How It Works
 
 1. **Browser automation** -- Uses Playwright with real Chrome (`channel="chrome"`) in headless mode to interact with the EMS Cloud booking system.
@@ -163,6 +176,7 @@ study-room search --date 2026-03-11 --start 15:00 --end 17:00 --book
 4. **Auto re-login** -- When a session expires during a search or booking operation, the tool automatically opens a headed browser, loads credentials from the system keyring, and re-authenticates with Duo Push.
 5. **Room search** -- Navigates to the EMS booking page, fills in date and time fields, and parses available rooms by inspecting the DOM for booking buttons.
 6. **Booking** -- Clicks the add-to-cart button for the selected room, fills in the reservation form (name, email, terms), and submits the reservation.
+7. **Cancellation** -- Navigates to My Events, clicks the reservation link, selects a cancel reason from the dropdown, and confirms the cancellation.
 
 ## Configuration
 
