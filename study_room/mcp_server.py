@@ -51,7 +51,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="my_events",
-            description="List current reservations. Returns upcoming bookings with date, room, status, and reservation ID.",
+            description="List current reservations. Returns upcoming bookings with date, time, room, status, and reservation ID.",
             inputSchema={
                 "type": "object",
                 "properties": {},
@@ -126,7 +126,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text="No current reservations.")]
             lines = [f"{len(reservations)} reservation(s):"]
             for r in reservations:
-                lines.append(f"  - {r.date} | {r.room} | {r.status} (ID: {r.reservation_id})")
+                lines.append(f"  - {r.date} {r.time} | {r.room} | {r.status} (ID: {r.reservation_id})")
             return [TextContent(type="text", text="\n".join(lines))]
 
         elif name == "cancel_reservation":

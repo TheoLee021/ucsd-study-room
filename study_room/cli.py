@@ -94,11 +94,12 @@ def events():
 
     table = Table(title="My Reservations")
     table.add_column("Date", style="cyan")
+    table.add_column("Time", style="cyan")
     table.add_column("Room", style="green")
     table.add_column("Status", style="yellow")
     table.add_column("ID", style="dim")
     for r in reservations:
-        table.add_row(r.date, r.room, r.status, r.reservation_id)
+        table.add_row(r.date, r.time, r.room, r.status, r.reservation_id)
     console.print(table)
 
 
@@ -123,11 +124,12 @@ def cancel(
         table = Table(title="My Reservations")
         table.add_column("#", style="cyan")
         table.add_column("Date", style="green")
+        table.add_column("Time", style="green")
         table.add_column("Room", style="green")
         table.add_column("Status", style="yellow")
         table.add_column("ID", style="dim")
         for i, r in enumerate(reservations, 1):
-            table.add_row(str(i), r.date, r.room, r.status, r.reservation_id)
+            table.add_row(str(i), r.date, r.time, r.room, r.status, r.reservation_id)
         console.print(table)
 
         choice = typer.prompt(f"Select reservation to cancel [1-{len(reservations)}/n]", default="n")

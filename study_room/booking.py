@@ -18,6 +18,7 @@ class Room:
 @dataclass
 class Reservation:
     date: str
+    time: str
     room: str
     status: str
     reservation_id: str
@@ -315,7 +316,8 @@ async def _open_and_get_events(playwright) -> list[Reservation]:
         rows = page.locator("table.table tbody tr")
         count = await rows.count()
 
-        reservations = []
+        # Collect basic info and name links from My Events table
+        entries = []
         for i in range(count):
             row = rows.nth(i)
             cols = row.locator("td")
@@ -327,13 +329,47 @@ async def _open_and_get_events(playwright) -> list[Reservation]:
             room = location_text.split(" - ")[-1].strip() if " - " in location_text else location_text
             reservation_id = (await cols.nth(5).inner_text()).strip()
             status = (await cols.nth(6).inner_text()).strip()
+            entries.append({
+                "index": i,
+                "date": date_text,
+                "room": room,
+                "reservation_id": reservation_id,
+                "status": status,
+            })
+
+        # Navigate to each detail page to get time info
+        reservations = []
+        for entry in entries:
+            row = rows.nth(entry["index"])
+            name_link = row.locator("td").nth(0).locator("a")
+            await name_link.click()
+            await page.wait_for_load_state("networkidle")
+            await asyncio.sleep(2)
+
+            # Parse Bookings table (table-sort): EDIT | REMOVE | DATE | START TIME | END TIME | ...
+            time_text = ""
+            booking_rows = page.locator("table.table-sort tbody tr")
+            if await booking_rows.count() > 0:
+                booking_cols = booking_rows.nth(0).locator("td")
+                if await booking_cols.count() >= 5:
+                    start_text = (await booking_cols.nth(3).inner_text()).strip()
+                    end_text = (await booking_cols.nth(4).inner_text()).strip()
+                    time_text = f"{start_text} - {end_text}"
 
             reservations.append(Reservation(
-                date=date_text,
-                room=room,
-                status=status,
-                reservation_id=reservation_id,
+                date=entry["date"],
+                time=time_text,
+                room=entry["room"],
+                status=entry["status"],
+                reservation_id=entry["reservation_id"],
             ))
+
+            # Go back to My Events list
+            await page.goto(MY_EVENTS_URL)
+            await page.wait_for_load_state("networkidle")
+            await asyncio.sleep(2)
+            # Re-locate rows after navigation
+            rows = page.locator("table.table tbody tr")
 
         return reservations
     finally:
@@ -388,7 +424,7 @@ async def _open_and_cancel(playwright, date: str, room_name: str | None, reason:
                     continue
                 matching_rows.append({
                     "index": i,
-                    "reservation": Reservation(date=date_text, room=room, status=status, reservation_id=reservation_id),
+                    "reservation": Reservation(date=date_text, time="", room=room, status=status, reservation_id=reservation_id),
                 })
 
         if not matching_rows:
