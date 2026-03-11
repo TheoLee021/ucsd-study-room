@@ -1,6 +1,6 @@
 [project]
 name = "ucsd-study-room"
-version = "0.2.0"
+version = "0.3.0"
 description = "MCP server and CLI tool for automated UCSD study room booking via EMS"
 readme = "README.md"
 license = "MIT"
