@@ -37,17 +37,6 @@ ucsd-study-room MCP 서버를 설치해줘:
 - "3월 13일 예약 취소해줘"
 - "내 예약 목록 보여줘"
 
-### 업데이트
-
-업데이트하려면 AI 어시스턴트에게 아래 프롬프트를 붙여넣으세요:
-
-```
-study-room MCP 서버를 업데이트해줘:
-실행: uv tool install ucsd-study-room@latest
-```
-
-이후 클라이언트를 재시작(`/exit` 후 다시 열기)하면 새 버전의 MCP 서버가 로드됩니다.
-
 ## 요구 사항
 
 - Python 3.11 이상
