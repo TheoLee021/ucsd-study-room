@@ -37,17 +37,6 @@ Once set up, just ask your AI assistant in natural language:
 - "Cancel my reservation on March 13"
 - "Show my current reservations"
 
-### Updating
-
-To update, paste this prompt to your AI assistant:
-
-```
-Update the study-room MCP server:
-Run: uv tool install ucsd-study-room@latest
-```
-
-Then restart your client (e.g., `/exit` and reopen) to reload the MCP server with the new version.
-
 ## Requirements
 
 - Python 3.11 or later
