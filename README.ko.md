@@ -78,6 +78,23 @@ pip를 사용하는 경우, MCP 서버를 다음과 같이 설정하세요:
 
 </details>
 
+## 업데이트
+
+최신 버전으로 업데이트하려면:
+
+```bash
+uv tool install ucsd-study-room@latest
+```
+
+MCP를 지원하는 AI 어시스턴트를 사용 중이라면, 아래 프롬프트를 붙여넣으세요:
+
+```
+study-room MCP 서버를 업데이트해줘:
+실행: uv tool install ucsd-study-room@latest
+```
+
+이후 클라이언트를 재시작(`/exit` 후 다시 열기)하면 새 버전의 MCP 서버가 로드됩니다.
+
 ## 초기 설정
 
 **1. 연락처 설정 (예약 전 필수):**
