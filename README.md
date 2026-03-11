@@ -78,7 +78,7 @@ If using pip, configure the MCP server with:
 
 </details>
 
-To update to the latest version:
+### Updating
 
 ```bash
 uv tool install ucsd-study-room@latest
