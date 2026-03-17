@@ -1,4 +1,6 @@
 import asyncio
+import os
+import sys
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -8,7 +10,21 @@ from study_room.auth import login as auth_login, is_session_valid, SessionExpire
 from study_room.booking import search_rooms, search_and_book, my_events, cancel_reservation, Room, Reservation, CancelResult, CANCEL_REASONS, BookingError
 from study_room.updater import get_current_version, check_pypi_latest, run_update, get_update_notice
 
-app = typer.Typer(help="UCSD Study Room Booking Tool")
+def _version_check_callback(result=None):
+    """Called after every command. Prints update notice to stderr."""
+    if len(sys.argv) > 1 and sys.argv[1] == "update":
+        return
+    if os.environ.get("STUDY_ROOM_NO_UPDATE_CHECK"):
+        return
+    try:
+        notice = get_update_notice()
+        if notice:
+            console.print(f"\n[yellow]⚠ {notice}[/yellow]", stderr=True)
+    except Exception:
+        pass
+
+
+app = typer.Typer(help="UCSD Study Room Booking Tool", result_callback=_version_check_callback)
 console = Console()
 
 
