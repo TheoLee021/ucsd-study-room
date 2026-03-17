@@ -15,6 +15,7 @@ from study_room.booking import (
     BookingError,
 )
 from study_room.auth import login as auth_login, is_session_valid
+from study_room.updater import get_update_notice
 
 server = Server("study-room")
 
@@ -98,6 +99,19 @@ async def list_tools() -> list[Tool]:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    results = await _handle_tool(name, arguments)
+
+    try:
+        notice = get_update_notice()
+        if notice:
+            results.append(TextContent(type="text", text=f"⚠ {notice}"))
+    except Exception:
+        pass
+
+    return results
+
+
+async def _handle_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "search_rooms":
             rooms = await search_rooms(
