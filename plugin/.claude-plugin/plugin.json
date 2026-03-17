@@ -1,0 +1,12 @@
+{
+  "name": "ucsd-study-room",
+  "description": "UCSD Price Center Study Room booking via AI — search, book, cancel, and manage reservations",
+  "version": "1.0.0",
+  "author": {
+    "name": "Theo Lee",
+    "email": "thl030@ucsd.edu"
+  },
+  "repository": "https://github.com/TheoLee021/ucsd-study-room",
+  "license": "MIT",
+  "keywords": ["ucsd", "study-room", "booking", "ems"]
+}
