@@ -1,4 +1,6 @@
 import asyncio
+import os
+import sys
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -6,8 +8,23 @@ from rich.table import Table
 from study_room.config import load_config, save_config, CONFIG_PATH
 from study_room.auth import login as auth_login, is_session_valid, SessionExpiredError
 from study_room.booking import search_rooms, search_and_book, my_events, cancel_reservation, Room, Reservation, CancelResult, CANCEL_REASONS, BookingError
+from study_room.updater import get_current_version, check_pypi_latest, run_update, get_update_notice
 
-app = typer.Typer(help="UCSD Study Room Booking Tool")
+def _version_check_callback(result=None):
+    """Called after every command. Prints update notice to stderr."""
+    if len(sys.argv) > 1 and sys.argv[1] == "update":
+        return
+    if os.environ.get("STUDY_ROOM_NO_UPDATE_CHECK"):
+        return
+    try:
+        notice = get_update_notice()
+        if notice:
+            console.print(f"\n[yellow]⚠ {notice}[/yellow]", stderr=True)
+    except Exception:
+        pass
+
+
+app = typer.Typer(help="UCSD Study Room Booking Tool", result_callback=_version_check_callback)
 console = Console()
 
 
@@ -237,6 +254,30 @@ def status():
         console.print("[green]Session valid[/green]")
     else:
         console.print("[yellow]Session expired — run 'study-room login'[/yellow]")
+
+
+@app.command()
+def update():
+    """Update ucsd-study-room to the latest version."""
+    current = get_current_version()
+    latest = check_pypi_latest()
+
+    if latest:
+        console.print(f"Current version: {current}")
+        console.print(f"Latest version:  {latest}")
+    else:
+        console.print(f"Current version: {current}")
+        console.print("[yellow]Could not reach PyPI.[/yellow]")
+        raise typer.Exit(1)
+
+    status, message = run_update()
+    if status == "updated":
+        console.print(f"[green]✓ {message}[/green]")
+    elif status == "current":
+        console.print(f"[green]{message}[/green]")
+    else:
+        console.print(f"[red]✗ {message}[/red]")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
