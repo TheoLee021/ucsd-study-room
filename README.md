@@ -18,7 +18,27 @@ Works with Claude Code, Codex CLI, Gemini CLI, Cursor, and any MCP-compatible cl
 
 ## Quick Start
 
-If you're using an MCP-compatible AI assistant (Claude Code, Codex CLI, etc.), simply copy and paste this prompt:
+### Claude Code (Recommended)
+
+Install as a plugin — no manual setup needed, auto-updates included:
+
+```bash
+claude /plugin marketplace add TheoLee021/claude-plugins
+claude /plugin install ucsd-study-room
+```
+
+Then set up your account:
+
+```bash
+study-room config --name "Your Name" --email "you@ucsd.edu"
+study-room login
+```
+
+That's it. Ask Claude: *"Book a study room tomorrow from 2pm to 4pm"*
+
+### Other MCP Clients
+
+If you're using another MCP-compatible AI assistant (Codex CLI, Gemini CLI, Cursor, etc.), simply copy and paste this prompt:
 
 ```
 Install the ucsd-study-room MCP server:
@@ -81,8 +101,10 @@ If using pip, configure the MCP server with:
 ### Updating
 
 ```bash
-uv tool install ucsd-study-room@latest
+study-room update
 ```
+
+Or manually: `uv tool install ucsd-study-room@latest`
 
 ## Initial Setup
 
@@ -151,6 +173,7 @@ Once configured, you can use natural language to manage bookings:
 | `study-room events`        | Show current reservations                                        |
 | `study-room config`        | View or set user info (`--name`, `--email`, `--attendees`)       |
 | `study-room status`        | Check whether the current session is valid                       |
+| `study-room update`        | Update to the latest version from PyPI                           |
 
 ### Examples
 
