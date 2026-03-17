@@ -1,6 +1,0 @@
-{
-  "study-room": {
-    "command": "uvx",
-    "args": ["--refresh", "--from", "ucsd-study-room", "study-room-mcp"]
-  }
-}
