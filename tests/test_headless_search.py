@@ -1,10 +1,10 @@
 """
-Headless mode (channel='chrome', headless=True) EMS 검색 테스트.
+EMS search test in headless mode (channel='chrome', headless=True).
 
-사전 조건: `study-room login`으로 세션이 저장되어 있어야 함.
+Prerequisite: a session saved via `study-room login`.
 
-실행: .venv/bin/python tests/test_headless_search.py [DATE]
-  DATE 생략 시 모레 날짜 사용
+Usage: .venv/bin/python tests/test_headless_search.py [DATE]
+  DATE defaults to two days from today
 """
 
 import asyncio
@@ -37,51 +37,51 @@ async def run_headless_search(test_date: str):
     print("Mode: channel='chrome', headless=True")
     print()
 
-    # 세션 확인
+    # Check session
     if not is_session_valid():
-        print("ERROR: 세션이 없거나 만료됨. 'study-room login' 먼저 실행.")
+        print("ERROR: No session or session expired. Run 'study-room login' first.")
         return False
 
     async with async_playwright() as p:
-        # headless=True로 브라우저 열기
+        # Open browser with headless=True
         context = await get_authenticated_context(p, headless=True, channel="chrome")
         if context is None:
-            print("ERROR: 인증된 컨텍스트 생성 실패.")
+            print("ERROR: Failed to create authenticated context.")
             return False
 
         page = await context.new_page()
         try:
-            print("[1/4] SAML 인증 중...")
+            print("[1/4] Authenticating via SAML...")
             await authenticate(page)
 
-            print("[2/4] EMS 접속 + 검색 중...")
+            print("[2/4] Opening EMS and searching...")
             await _navigate_to_search(
                 page, formatted_date, formatted_start, formatted_end
             )
 
-            print("[3/4] 검색 결과 확인 중...")
+            print("[3/4] Checking search results...")
             loaded = await _check_search_loaded(page)
 
             if not loaded:
-                print("FAIL: 검색 결과가 로드되지 않음 (봇 감지 가능성)")
-                print(f"  현재 URL: {page.url}")
+                print("FAIL: Search results did not load (possible bot detection)")
+                print(f"  Current URL: {page.url}")
                 title = await page.title()
-                print(f"  페이지 제목: {title}")
+                print(f"  Page title: {title}")
                 return False
 
-            print("[4/4] 방 목록 파싱 중...")
+            print("[4/4] Parsing room list...")
             rooms = await _parse_available_rooms(page, target_rooms)
 
             print()
-            print("SUCCESS: headless 검색 성공!")
-            print(f"  빈 방 {len(rooms)}개:")
+            print("SUCCESS: Headless search succeeded!")
+            print(f"  {len(rooms)} available room(s):")
             for room in rooms:
                 print(f"    - {room.name}")
             return True
 
         except Exception as e:
             print(f"ERROR: {type(e).__name__}: {e}")
-            print(f"  현재 URL: {page.url}")
+            print(f"  Current URL: {page.url}")
             return False
         finally:
             await context.browser.close()
