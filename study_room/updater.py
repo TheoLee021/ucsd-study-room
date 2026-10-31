@@ -3,8 +3,8 @@
 import json
 import subprocess
 import urllib.request
-from datetime import datetime, timezone, timedelta
-from importlib.metadata import version, PackageNotFoundError
+from datetime import UTC, datetime, timedelta
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from packaging.version import Version
@@ -44,7 +44,7 @@ def write_cache(latest_version: str, path: Path = CACHE_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
         "cache_version": CACHE_VERSION,
-        "last_check": datetime.now(timezone.utc).isoformat(),
+        "last_check": datetime.now(UTC).isoformat(),
         "latest_version": latest_version,
     }
     path.write_text(json.dumps(data))
@@ -56,7 +56,7 @@ def read_cache(path: Path = CACHE_PATH) -> dict | None:
         if data.get("cache_version") != CACHE_VERSION:
             return None
         last_check = datetime.fromisoformat(data["last_check"])
-        if datetime.now(timezone.utc) - last_check > CHECK_INTERVAL:
+        if datetime.now(UTC) - last_check > CHECK_INTERVAL:
             return None
         return data
     except (FileNotFoundError, json.JSONDecodeError, KeyError, ValueError):
@@ -100,6 +100,12 @@ def run_update() -> tuple[str, str]:
         else:
             return ("error", f"Update failed:\n  {result.stderr.strip()}")
     except FileNotFoundError:
-        return ("error", f"uv not found. Run manually:\n  pip install --upgrade {PYPI_PACKAGE}")
+        return (
+            "error",
+            f"uv not found. Run manually:\n  pip install --upgrade {PYPI_PACKAGE}",
+        )
     except subprocess.TimeoutExpired:
-        return ("error", f"Update timed out. Run manually:\n  uv tool install --upgrade {PYPI_PACKAGE}")
+        return (
+            "error",
+            f"Update timed out. Run manually:\n  uv tool install --upgrade {PYPI_PACKAGE}",
+        )

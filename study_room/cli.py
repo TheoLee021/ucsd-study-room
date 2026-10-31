@@ -1,17 +1,32 @@
 import asyncio
 import os
 import sys
+
 import typer
 from playwright.async_api import Error as PlaywrightError
 from rich.console import Console
 from rich.table import Table
 
-from study_room.config import load_config, save_config, CONFIG_PATH
 from study_room.auth import LoginError, SessionExpiredError, is_session_valid
-from study_room.auth import login as auth_login
 from study_room.auth import console as auth_console
-from study_room.booking import search_rooms, search_and_book, my_events, cancel_reservation, Room, Reservation, CancelResult, CANCEL_REASONS, BookingError
-from study_room.updater import get_current_version, check_pypi_latest, run_update, get_update_notice
+from study_room.auth import login as auth_login
+from study_room.booking import (
+    CANCEL_REASONS,
+    BookingError,
+    Room,
+    cancel_reservation,
+    my_events,
+    search_and_book,
+    search_rooms,
+)
+from study_room.config import load_config, save_config
+from study_room.updater import (
+    check_pypi_latest,
+    get_current_version,
+    get_update_notice,
+    run_update,
+)
+
 
 def _version_check_callback(result=None):
     """Called after every command. Prints update notice to stderr."""
@@ -27,7 +42,9 @@ def _version_check_callback(result=None):
         pass
 
 
-app = typer.Typer(help="UCSD Study Room Booking Tool", result_callback=_version_check_callback)
+app = typer.Typer(
+    help="UCSD Study Room Booking Tool", result_callback=_version_check_callback
+)
 console = Console()
 
 
@@ -81,24 +98,26 @@ def search(
                 return None
 
         try:
-            result = asyncio.run(search_and_book(date, start, end, room_selector=pick_room))
+            result = asyncio.run(
+                search_and_book(date, start, end, room_selector=pick_room)
+            )
             console.print(f"[green]{result}[/green]")
         except SessionExpiredError as e:
             console.print(f"[red]{e}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
         except BookingError as e:
             console.print(f"[red]{e}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
     else:
         # search only
         try:
             rooms = asyncio.run(search_rooms(date, start, end))
         except SessionExpiredError as e:
             console.print(f"[red]{e}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
         except BookingError as e:
             console.print(f"[yellow]{e}[/yellow]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         if not rooms:
             console.print("[yellow]No rooms available for the selected time.[/yellow]")
@@ -119,7 +138,7 @@ def events():
         reservations = asyncio.run(my_events())
     except SessionExpiredError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if not reservations:
         console.print("[yellow]No current reservations.[/yellow]")
@@ -148,7 +167,7 @@ def cancel(
             reservations = asyncio.run(my_events())
         except SessionExpiredError as e:
             console.print(f"[red]{e}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         if not reservations:
             console.print("[yellow]No current reservations.[/yellow]")
@@ -165,7 +184,9 @@ def cancel(
             table.add_row(str(i), r.date, r.time, r.room, r.status, r.reservation_id)
         console.print(table)
 
-        choice = typer.prompt(f"Select reservation to cancel [1-{len(reservations)}/n]", default="n")
+        choice = typer.prompt(
+            f"Select reservation to cancel [1-{len(reservations)}/n]", default="n"
+        )
         if choice.lower() == "n":
             console.print("Cancelled.")
             raise typer.Exit(0)
@@ -173,7 +194,7 @@ def cancel(
             selected = reservations[int(choice) - 1]
         except (ValueError, IndexError):
             console.print("[red]Invalid selection.[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         date_for_cancel = selected.date  # raw date text from My Events table
         room_for_cancel = selected.room
@@ -191,17 +212,19 @@ def cancel(
             reason = CANCEL_REASONS[int(reason_choice) - 1]
         except (ValueError, IndexError):
             console.print("[red]Invalid selection.[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     # Step 3: Execute cancel
     try:
-        result = asyncio.run(cancel_reservation(date_for_cancel, room_for_cancel, reason))
+        result = asyncio.run(
+            cancel_reservation(date_for_cancel, room_for_cancel, reason)
+        )
     except SessionExpiredError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except BookingError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if result.status == "cancelled":
         console.print(f"[green]{result.message}[/green]")
@@ -224,9 +247,11 @@ def cancel(
             selected = result.reservations[int(choice) - 1]
         except (ValueError, IndexError):
             console.print("[red]Invalid selection.[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
-        result2 = asyncio.run(cancel_reservation(date_for_cancel, selected.room, reason))
+        result2 = asyncio.run(
+            cancel_reservation(date_for_cancel, selected.room, reason)
+        )
         if result2.status == "cancelled":
             console.print(f"[green]{result2.message}[/green]")
         else:

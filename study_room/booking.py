@@ -1,9 +1,15 @@
 import asyncio
 import platform
 from dataclasses import dataclass
-from playwright.async_api import async_playwright, Page, BrowserContext
 
-from study_room.auth import get_authenticated_context, authenticate, EMS_URL, SessionExpiredError
+from playwright.async_api import Page, async_playwright
+
+from study_room.auth import (
+    EMS_URL,
+    SessionExpiredError,
+    authenticate,
+    get_authenticated_context,
+)
 from study_room.config import load_config
 
 _SELECT_ALL = "Meta+a" if platform.system() == "Darwin" else "Control+a"
@@ -84,11 +90,15 @@ async def _navigate_to_search(page: Page, date: str, start_time: str, end_time: 
 
 async def _check_search_loaded(page: Page) -> bool:
     """Check if search results loaded successfully."""
-    room_results = page.locator(".column-text.available a.location, .column-text.unavailable a.location")
+    room_results = page.locator(
+        ".column-text.available a.location, .column-text.unavailable a.location"
+    )
     return await room_results.count() > 0
 
 
-async def _search_with_retry(page: Page, date: str, start_time: str, end_time: str) -> None:
+async def _search_with_retry(
+    page: Page, date: str, start_time: str, end_time: str
+) -> None:
     """SAML auth → search, re-authenticating once if results fail to load."""
     await authenticate(page)
     await _navigate_to_search(page, date, start_time, end_time)
@@ -130,7 +140,9 @@ def _format_time(time_24h: str) -> str:
 # === Public API ===
 
 
-async def _open_and_search(playwright, date: str, start_time: str, end_time: str, target_rooms: set[str]) -> list[Room]:
+async def _open_and_search(
+    playwright, date: str, start_time: str, end_time: str, target_rooms: set[str]
+) -> list[Room]:
     """Headless browser search."""
     context = await get_authenticated_context(playwright)
     if context is None:
@@ -153,13 +165,15 @@ async def search_rooms(date: str, start_time: str, end_time: str) -> list[Room]:
     formatted_end = _format_time(end_time)
 
     async with async_playwright() as p:
-        return await _open_and_search(p, formatted_date, formatted_start, formatted_end, target_rooms)
+        return await _open_and_search(
+            p, formatted_date, formatted_start, formatted_end, target_rooms
+        )
 
 
-async def _open_search_and_book(playwright, date: str, start_time: str, end_time: str, room_name: str, config: dict) -> str:
+async def _open_search_and_book(
+    playwright, date: str, start_time: str, end_time: str, room_name: str, config: dict
+) -> str:
     """Headless browser search + book."""
-    formatted_start = _format_time(start_time.replace("/", ":")) if "/" in start_time else start_time
-    formatted_end = _format_time(end_time.replace("/", ":")) if "/" in end_time else end_time
 
     context = await get_authenticated_context(playwright)
     if context is None:
@@ -207,10 +221,20 @@ async def book_room(date: str, start_time: str, end_time: str, room_name: str) -
     formatted_end = _format_time(end_time)
 
     async with async_playwright() as p:
-        return await _open_search_and_book(p, formatted_date, formatted_start, formatted_end, room_name, config)
+        return await _open_search_and_book(
+            p, formatted_date, formatted_start, formatted_end, room_name, config
+        )
 
 
-async def _open_search_and_book_interactive(playwright, date: str, start_time: str, end_time: str, target_rooms: set[str], config: dict, room_selector=None) -> str:
+async def _open_search_and_book_interactive(
+    playwright,
+    date: str,
+    start_time: str,
+    end_time: str,
+    target_rooms: set[str],
+    config: dict,
+    room_selector=None,
+) -> str:
     """Headless browser search → select → book."""
     context = await get_authenticated_context(playwright)
     if context is None:
@@ -256,7 +280,9 @@ async def _open_search_and_book_interactive(playwright, date: str, start_time: s
         await context.browser.close()
 
 
-async def search_and_book(date: str, start_time: str, end_time: str, room_selector=None) -> str:
+async def search_and_book(
+    date: str, start_time: str, end_time: str, room_selector=None
+) -> str:
     """
     Search → user selection → book in a single browser session.
 
@@ -271,7 +297,15 @@ async def search_and_book(date: str, start_time: str, end_time: str, room_select
     formatted_end = _format_time(end_time)
 
     async with async_playwright() as p:
-        return await _open_search_and_book_interactive(p, formatted_date, formatted_start, formatted_end, target_rooms, config, room_selector)
+        return await _open_search_and_book_interactive(
+            p,
+            formatted_date,
+            formatted_start,
+            formatted_end,
+            target_rooms,
+            config,
+            room_selector,
+        )
 
 
 MY_EVENTS_URL = "https://ucsdevents.emscloudservice.com/web/BrowseReservations.aspx"
@@ -281,7 +315,9 @@ async def _open_and_get_events(playwright) -> list[Reservation]:
     """Parse current reservations from the MY EVENTS page via headless browser."""
     context = await get_authenticated_context(playwright)
     if context is None:
-        raise SessionExpiredError("Session expired. Please run 'study-room login' first.")
+        raise SessionExpiredError(
+            "Session expired. Please run 'study-room login' first."
+        )
 
     page = await context.new_page()
     try:
@@ -307,16 +343,22 @@ async def _open_and_get_events(playwright) -> list[Reservation]:
 
             date_text = (await cols.nth(1).inner_text()).strip().split("/")[0].strip()
             location_text = (await cols.nth(2).inner_text()).strip()
-            room = location_text.split(" - ")[-1].strip() if " - " in location_text else location_text
+            room = (
+                location_text.split(" - ")[-1].strip()
+                if " - " in location_text
+                else location_text
+            )
             reservation_id = (await cols.nth(5).inner_text()).strip()
             status = (await cols.nth(6).inner_text()).strip()
-            entries.append({
-                "index": i,
-                "date": date_text,
-                "room": room,
-                "reservation_id": reservation_id,
-                "status": status,
-            })
+            entries.append(
+                {
+                    "index": i,
+                    "date": date_text,
+                    "room": room,
+                    "reservation_id": reservation_id,
+                    "status": status,
+                }
+            )
 
         # Navigate to each detail page to get time info
         reservations = []
@@ -337,13 +379,15 @@ async def _open_and_get_events(playwright) -> list[Reservation]:
                     end_text = (await booking_cols.nth(4).inner_text()).strip()
                     time_text = f"{start_text} - {end_text}"
 
-            reservations.append(Reservation(
-                date=entry["date"],
-                time=time_text,
-                room=entry["room"],
-                status=entry["status"],
-                reservation_id=entry["reservation_id"],
-            ))
+            reservations.append(
+                Reservation(
+                    date=entry["date"],
+                    time=time_text,
+                    room=entry["room"],
+                    status=entry["status"],
+                    reservation_id=entry["reservation_id"],
+                )
+            )
 
             # Go back to My Events list
             await page.goto(MY_EVENTS_URL)
@@ -363,11 +407,15 @@ async def my_events() -> list[Reservation]:
         return await _open_and_get_events(p)
 
 
-async def _open_and_cancel(playwright, date: str, room_name: str | None, reason: str) -> CancelResult:
+async def _open_and_cancel(
+    playwright, date: str, room_name: str | None, reason: str
+) -> CancelResult:
     """Navigate My Events → find reservation → cancel."""
     context = await get_authenticated_context(playwright)
     if context is None:
-        raise SessionExpiredError("Session expired. Please run 'study-room login' first.")
+        raise SessionExpiredError(
+            "Session expired. Please run 'study-room login' first."
+        )
 
     page = await context.new_page()
     try:
@@ -393,20 +441,34 @@ async def _open_and_cancel(playwright, date: str, room_name: str | None, reason:
 
             date_text = (await cols.nth(1).inner_text()).strip().split("/")[0].strip()
             location_text = (await cols.nth(2).inner_text()).strip()
-            room = location_text.split(" - ")[-1].strip() if " - " in location_text else location_text
+            room = (
+                location_text.split(" - ")[-1].strip()
+                if " - " in location_text
+                else location_text
+            )
             reservation_id = (await cols.nth(5).inner_text()).strip()
             status = (await cols.nth(6).inner_text()).strip()
 
             if date in date_text:
                 if room_name and room_name not in room:
                     continue
-                matching_rows.append({
-                    "index": i,
-                    "reservation": Reservation(date=date_text, time="", room=room, status=status, reservation_id=reservation_id),
-                })
+                matching_rows.append(
+                    {
+                        "index": i,
+                        "reservation": Reservation(
+                            date=date_text,
+                            time="",
+                            room=room,
+                            status=status,
+                            reservation_id=reservation_id,
+                        ),
+                    }
+                )
 
         if not matching_rows:
-            return CancelResult(status="error", message=f"No reservation found for {date}.")
+            return CancelResult(
+                status="error", message=f"No reservation found for {date}."
+            )
 
         if len(matching_rows) > 1 and room_name is None:
             return CancelResult(
@@ -456,11 +518,14 @@ async def _open_and_cancel(playwright, date: str, room_name: str | None, reason:
 def _format_date_for_match(date_iso: str) -> str:
     """YYYY-MM-DD → 'Mar 13, 2026' for substring matching against EMS date text."""
     from datetime import datetime as _dt
+
     dt = _dt.strptime(date_iso, "%Y-%m-%d")
     return f"{dt.strftime('%b')} {dt.day}, {dt.year}"
 
 
-async def cancel_reservation(date: str, room_name: str | None = None, reason: str = "Changed Date") -> CancelResult:
+async def cancel_reservation(
+    date: str, room_name: str | None = None, reason: str = "Changed Date"
+) -> CancelResult:
     """Cancel a reservation by date. Optionally filter by room_name.
 
     Args:

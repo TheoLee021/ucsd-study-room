@@ -1,4 +1,4 @@
-from study_room.booking import CancelResult, CANCEL_REASONS, Reservation
+from study_room.booking import CANCEL_REASONS, CancelResult, Reservation
 
 
 def test_cancel_reasons_has_8_options():
@@ -19,8 +19,20 @@ def test_cancel_result_cancelled():
 
 def test_cancel_result_needs_selection():
     reservations = [
-        Reservation(date="Mar 12", time="3:00 PM - 5:00 PM", room="Room 1", status="Confirmed", reservation_id="123"),
-        Reservation(date="Mar 12", time="5:00 PM - 7:00 PM", room="Room 2", status="Confirmed", reservation_id="456"),
+        Reservation(
+            date="Mar 12",
+            time="3:00 PM - 5:00 PM",
+            room="Room 1",
+            status="Confirmed",
+            reservation_id="123",
+        ),
+        Reservation(
+            date="Mar 12",
+            time="5:00 PM - 7:00 PM",
+            room="Room 2",
+            status="Confirmed",
+            reservation_id="456",
+        ),
     ]
     result = CancelResult(
         status="needs_selection",

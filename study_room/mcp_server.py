@@ -1,20 +1,21 @@
 # study_room/mcp_server.py
 import asyncio
+
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
+from study_room.auth import LoginError
+from study_room.auth import login as auth_login
 from study_room.booking import (
-    search_rooms,
-    book_room,
-    my_events,
-    cancel_reservation,
-    CANCEL_REASONS,
-    SessionExpiredError,
-    DateUnavailableError,
     BookingError,
+    DateUnavailableError,
+    SessionExpiredError,
+    book_room,
+    cancel_reservation,
+    my_events,
+    search_rooms,
 )
-from study_room.auth import login as auth_login, is_session_valid, LoginError
 from study_room.updater import get_update_notice
 
 server = Server("study-room")
@@ -30,8 +31,14 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "date": {"type": "string", "description": "Date (YYYY-MM-DD)"},
-                    "start_time": {"type": "string", "description": "Start time (HH:MM, 24h)"},
-                    "end_time": {"type": "string", "description": "End time (HH:MM, 24h)"},
+                    "start_time": {
+                        "type": "string",
+                        "description": "Start time (HH:MM, 24h)",
+                    },
+                    "end_time": {
+                        "type": "string",
+                        "description": "End time (HH:MM, 24h)",
+                    },
                 },
                 "required": ["date", "start_time", "end_time"],
             },
@@ -43,9 +50,15 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "date": {"type": "string", "description": "Date (YYYY-MM-DD)"},
-                    "start_time": {"type": "string", "description": "Start time (HH:MM)"},
+                    "start_time": {
+                        "type": "string",
+                        "description": "Start time (HH:MM)",
+                    },
                     "end_time": {"type": "string", "description": "End time (HH:MM)"},
-                    "room_name": {"type": "string", "description": "Room name (e.g. Price Center Study Room 2)"},
+                    "room_name": {
+                        "type": "string",
+                        "description": "Room name (e.g. Price Center Study Room 2)",
+                    },
                 },
                 "required": ["date", "start_time", "end_time", "room_name"],
             },
@@ -77,7 +90,10 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Cancel reason. Must be one of: Bad Weather, Changed Date, Changed Location, Lack of Funding, Lack of Interest, Lack of Resources, Lack of Time to Plan, Other",
                     },
-                    "room_name": {"type": "string", "description": "Room name to disambiguate if multiple reservations on same date (optional)"},
+                    "room_name": {
+                        "type": "string",
+                        "description": "Room name to disambiguate if multiple reservations on same date (optional)",
+                    },
                 },
                 "required": ["date", "reason"],
             },
@@ -126,7 +142,11 @@ async def _handle_tool(name: str, arguments: dict) -> list[TextContent]:
                 arguments["date"], arguments["start_time"], arguments["end_time"]
             )
             if not rooms:
-                return [TextContent(type="text", text="No rooms available for the given time.")]
+                return [
+                    TextContent(
+                        type="text", text="No rooms available for the given time."
+                    )
+                ]
             lines = [f"{len(rooms)} room(s) available:"]
             for i, r in enumerate(rooms, 1):
                 lines.append(f"  {i}. {r.name}")
@@ -148,7 +168,9 @@ async def _handle_tool(name: str, arguments: dict) -> list[TextContent]:
                 return [TextContent(type="text", text="No current reservations.")]
             lines = [f"{len(reservations)} reservation(s):"]
             for r in reservations:
-                lines.append(f"  - {r.date} {r.time} | {r.room} | {r.status} (ID: {r.reservation_id})")
+                lines.append(
+                    f"  - {r.date} {r.time} | {r.room} | {r.status} (ID: {r.reservation_id})"
+                )
             return [TextContent(type="text", text="\n".join(lines))]
 
         elif name == "cancel_reservation":
@@ -164,7 +186,9 @@ async def _handle_tool(name: str, arguments: dict) -> list[TextContent]:
                 lines = [result.message]
                 for r in result.reservations:
                     lines.append(f"  - {r.room} | {r.status} (ID: {r.reservation_id})")
-                lines.append("\nCall cancel_reservation again with 'room_name' to specify which one.")
+                lines.append(
+                    "\nCall cancel_reservation again with 'room_name' to specify which one."
+                )
                 return [TextContent(type="text", text="\n".join(lines))]
             else:
                 return [TextContent(type="text", text=result.message)]
@@ -179,7 +203,12 @@ async def _handle_tool(name: str, arguments: dict) -> list[TextContent]:
     except LoginError as e:
         return [TextContent(type="text", text=f"Login failed: {e}")]
     except SessionExpiredError as e:
-        return [TextContent(type="text", text=f"Session expired: {e}\nPlease use the login tool first.")]
+        return [
+            TextContent(
+                type="text",
+                text=f"Session expired: {e}\nPlease use the login tool first.",
+            )
+        ]
     except DateUnavailableError as e:
         return [TextContent(type="text", text=str(e))]
     except BookingError as e:
@@ -190,7 +219,9 @@ async def _handle_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+        await server.run(
+            read_stream, write_stream, server.create_initialization_options()
+        )
 
 
 def main_sync():

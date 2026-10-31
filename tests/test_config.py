@@ -1,8 +1,4 @@
-import tempfile
-import os
-from pathlib import Path
-
-from study_room.config import load_config, save_config, DEFAULT_CONFIG
+from study_room.config import DEFAULT_CONFIG, load_config, save_config
 
 
 def test_default_config_has_required_fields():
