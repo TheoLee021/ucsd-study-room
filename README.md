@@ -20,12 +20,14 @@ Works with Claude Code, Codex CLI, Gemini CLI, Cursor, and any MCP-compatible cl
 
 ### Claude Code (Recommended)
 
-Install as a plugin — no manual setup needed, auto-updates included:
+Install as a plugin — no manual setup needed:
 
 ```bash
 claude /plugin marketplace add TheoLee021/claude-plugins
 claude /plugin install ucsd-study-room
 ```
+
+The MCP server fetches the latest version from PyPI on each launch. To also receive plugin (skill) updates automatically, run `/plugin`, open **Marketplaces**, select `theo-plugins`, and choose **Enable auto-update**. Or update manually with `/plugin marketplace update theo-plugins`.
 
 Then set up your account:
 
