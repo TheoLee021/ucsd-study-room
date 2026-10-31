@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import yaml
 
 CONFIG_DIR = Path.home() / ".study-room"

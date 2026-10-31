@@ -6,18 +6,19 @@ Headless mode (channel='chrome', headless=True) EMS 검색 테스트.
 실행: .venv/bin/python tests/test_headless_search.py [DATE]
   DATE 생략 시 모레 날짜 사용
 """
+
 import asyncio
 import sys
 from datetime import date, timedelta
 
 from playwright.async_api import async_playwright
 
-from study_room.auth import get_authenticated_context, is_session_valid, authenticate
+from study_room.auth import authenticate, get_authenticated_context, is_session_valid
 from study_room.booking import (
+    _check_search_loaded,
     _format_date,
     _format_time,
     _navigate_to_search,
-    _check_search_loaded,
     _parse_available_rooms,
 )
 from study_room.config import load_config
@@ -30,10 +31,10 @@ async def run_headless_search(test_date: str):
     formatted_start = _format_time("14:00")
     formatted_end = _format_time("16:00")
 
-    print(f"=== Headless Search Test ===")
+    print("=== Headless Search Test ===")
     print(f"Date: {test_date} ({formatted_date})")
     print(f"Time: {formatted_start} - {formatted_end}")
-    print(f"Mode: channel='chrome', headless=True")
+    print("Mode: channel='chrome', headless=True")
     print()
 
     # 세션 확인
@@ -54,7 +55,9 @@ async def run_headless_search(test_date: str):
             await authenticate(page)
 
             print("[2/4] EMS 접속 + 검색 중...")
-            await _navigate_to_search(page, formatted_date, formatted_start, formatted_end)
+            await _navigate_to_search(
+                page, formatted_date, formatted_start, formatted_end
+            )
 
             print("[3/4] 검색 결과 확인 중...")
             loaded = await _check_search_loaded(page)
@@ -70,7 +73,7 @@ async def run_headless_search(test_date: str):
             rooms = await _parse_available_rooms(page, target_rooms)
 
             print()
-            print(f"SUCCESS: headless 검색 성공!")
+            print("SUCCESS: headless 검색 성공!")
             print(f"  빈 방 {len(rooms)}개:")
             for room in rooms:
                 print(f"    - {room.name}")

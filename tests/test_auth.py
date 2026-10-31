@@ -141,5 +141,7 @@ def test_duo_trust_state_keeps_only_duo(tmp_path):
     (tmp_path / "storage_state.json").write_text(json.dumps(state))
     trimmed = _duo_trust_state(tmp_path / "session.json")
     assert [c["name"] for c in trimmed["cookies"]] == ["a"]
-    assert [o["origin"] for o in trimmed["origins"]] == ["https://api-x.duosecurity.com"]
+    assert [o["origin"] for o in trimmed["origins"]] == [
+        "https://api-x.duosecurity.com"
+    ]
     assert _duo_trust_state(tmp_path / "nowhere" / "session.json") is None

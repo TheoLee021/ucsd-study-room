@@ -47,8 +47,10 @@ def save_credentials(username: str, password: str) -> None:
         keyring.set_password(KEYRING_SERVICE, KEYRING_USERNAME_KEY, username)
         keyring.set_password(KEYRING_SERVICE, username, password)
     except Exception:
-        _log("Warning: Could not save credentials to system keyring. "
-              "Credentials will not be remembered for auto-login.")
+        _log(
+            "Warning: Could not save credentials to system keyring. "
+            "Credentials will not be remembered for auto-login."
+        )
 
 
 def load_credentials() -> tuple[str, str] | None:
