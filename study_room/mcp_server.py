@@ -1,5 +1,6 @@
 # study_room/mcp_server.py
 import asyncio
+import os
 import re
 
 from mcp.server import Server
@@ -131,8 +132,11 @@ async def list_tools() -> list[Tool]:
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     results = await _handle_tool(name, arguments)
 
+    if os.environ.get("STUDY_ROOM_NO_UPDATE_CHECK"):
+        return results
     try:
-        notice = get_update_notice()
+        # Off the event loop: a cache miss does a blocking PyPI request.
+        notice = await asyncio.to_thread(get_update_notice)
         if notice:
             results.append(TextContent(type="text", text=f"⚠ {notice}"))
     except Exception:
