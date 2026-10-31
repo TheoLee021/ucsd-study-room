@@ -104,3 +104,46 @@ def test_cancel_reservation_rejects_invalid_reason():
 
     result = asyncio.run(cancel_reservation("2026-03-13", reason="Because"))
     assert result.status == "error"
+
+
+class _FakeBannerLocator:
+    def __init__(self, page, selector):
+        self.page, self.selector = page, selector
+
+    async def is_visible(self):
+        return self.page.banner_visible
+
+    async def click(self):
+        self.page.clicked.append(self.selector)
+
+    async def wait_for(self, state, timeout):
+        pass
+
+
+class _FakeBannerPage:
+    def __init__(self, banner_visible):
+        self.banner_visible = banner_visible
+        self.clicked = []
+
+    def locator(self, selector):
+        return _FakeBannerLocator(self, selector)
+
+
+def test_dismiss_cookie_banner_accepts_when_visible():
+    import asyncio
+
+    from study_room.booking import _dismiss_cookie_banner
+
+    page = _FakeBannerPage(banner_visible=True)
+    asyncio.run(_dismiss_cookie_banner(page))
+    assert page.clicked == ["#onetrust-accept-btn-handler"]
+
+
+def test_dismiss_cookie_banner_noop_when_absent():
+    import asyncio
+
+    from study_room.booking import _dismiss_cookie_banner
+
+    page = _FakeBannerPage(banner_visible=False)
+    asyncio.run(_dismiss_cookie_banner(page))
+    assert page.clicked == []

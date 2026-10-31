@@ -67,10 +67,29 @@ async def _fill_input(page: Page, selector: str, value: str):
     await el.press("Tab")
 
 
+async def _dismiss_cookie_banner(page: Page) -> None:
+    """Accept the OneTrust cookie banner; its overlay intercepts clicks on EMS pages."""
+    accept = page.locator("#onetrust-accept-btn-handler")
+    try:
+        if await accept.is_visible():
+            await accept.click()
+            await page.locator(".onetrust-pc-dark-filter").wait_for(
+                state="hidden", timeout=5000
+            )
+    except PlaywrightError:
+        pass
+
+
+async def _goto_ems(page: Page, url: str) -> None:
+    """Navigate to an EMS page and clear the cookie banner if it appears."""
+    await page.goto(url)
+    await page.wait_for_load_state("networkidle")
+    await _dismiss_cookie_banner(page)
+
+
 async def _navigate_to_search(page: Page, date: str, start_time: str, end_time: str):
     """EMS main → Book Now → fill date/time → click Search."""
-    await page.goto(EMS_URL)
-    await page.wait_for_load_state("networkidle")
+    await _goto_ems(page, EMS_URL)
     await asyncio.sleep(1)
 
     await page.locator("button:has-text('book now')").first.click()
@@ -327,8 +346,7 @@ async def _open_and_get_events(playwright) -> list[Reservation]:
 
         await authenticate(page)
 
-        await page.goto(MY_EVENTS_URL)
-        await page.wait_for_load_state("networkidle")
+        await _goto_ems(page, MY_EVENTS_URL)
         await asyncio.sleep(2)
 
         rows = page.locator("table.table tbody tr")
@@ -391,8 +409,7 @@ async def _open_and_get_events(playwright) -> list[Reservation]:
             )
 
             # Go back to My Events list
-            await page.goto(MY_EVENTS_URL)
-            await page.wait_for_load_state("networkidle")
+            await _goto_ems(page, MY_EVENTS_URL)
             await asyncio.sleep(2)
             # Re-locate rows after navigation
             rows = page.locator("table.table tbody tr")
@@ -470,8 +487,7 @@ async def _open_and_cancel(
 
         await authenticate(page)
 
-        await page.goto(MY_EVENTS_URL)
-        await page.wait_for_load_state("networkidle")
+        await _goto_ems(page, MY_EVENTS_URL)
         await asyncio.sleep(2)
 
         # Parse rows and find matching reservations
