@@ -1148,7 +1148,7 @@ wheels = [
 
 [[package]]
 name = "ucsd-study-room"
-version = "0.5.1"
+version = "0.5.2"
 source = { editable = "." }
 dependencies = [
     { name = "keyring" },
