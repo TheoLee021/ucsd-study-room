@@ -132,7 +132,7 @@ def _format_time(time_24h: str) -> str:
 
 async def _open_and_search(playwright, date: str, start_time: str, end_time: str, target_rooms: set[str]) -> list[Room]:
     """Headless browser search."""
-    context = await get_authenticated_context(playwright, headless=True)
+    context = await get_authenticated_context(playwright)
     if context is None:
         raise SessionExpiredError("Session expired. Please run 'study-room login'.")
 
@@ -161,7 +161,7 @@ async def _open_search_and_book(playwright, date: str, start_time: str, end_time
     formatted_start = _format_time(start_time.replace("/", ":")) if "/" in start_time else start_time
     formatted_end = _format_time(end_time.replace("/", ":")) if "/" in end_time else end_time
 
-    context = await get_authenticated_context(playwright, headless=True)
+    context = await get_authenticated_context(playwright)
     if context is None:
         raise SessionExpiredError("Session expired. Please run 'study-room login'.")
 
@@ -212,7 +212,7 @@ async def book_room(date: str, start_time: str, end_time: str, room_name: str) -
 
 async def _open_search_and_book_interactive(playwright, date: str, start_time: str, end_time: str, target_rooms: set[str], config: dict, room_selector=None) -> str:
     """Headless browser search → select → book."""
-    context = await get_authenticated_context(playwright, headless=True)
+    context = await get_authenticated_context(playwright)
     if context is None:
         raise SessionExpiredError("Session expired. Please run 'study-room login'.")
 
@@ -279,7 +279,7 @@ MY_EVENTS_URL = "https://ucsdevents.emscloudservice.com/web/BrowseReservations.a
 
 async def _open_and_get_events(playwright) -> list[Reservation]:
     """Parse current reservations from the MY EVENTS page via headless browser."""
-    context = await get_authenticated_context(playwright, headless=True)
+    context = await get_authenticated_context(playwright)
     if context is None:
         raise SessionExpiredError("Session expired. Please run 'study-room login' first.")
 
@@ -365,7 +365,7 @@ async def my_events() -> list[Reservation]:
 
 async def _open_and_cancel(playwright, date: str, room_name: str | None, reason: str) -> CancelResult:
     """Navigate My Events → find reservation → cancel."""
-    context = await get_authenticated_context(playwright, headless=True)
+    context = await get_authenticated_context(playwright)
     if context is None:
         raise SessionExpiredError("Session expired. Please run 'study-room login' first.")
 

@@ -84,7 +84,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="login",
-            description="Authenticate via UCSD SSO + Duo Push. Use when session is expired. Opens a browser and requires Duo approval.",
+            description="Authenticate via UCSD SSO + Duo Push. Use when session is expired. Runs headlessly with no visible window and can take up to ~90 seconds. Before calling, tell the user that login is starting, that it may take a minute, and to approve the Duo Push on their phone.",
             inputSchema={
                 "type": "object",
                 "properties": {
