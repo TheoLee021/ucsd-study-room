@@ -149,9 +149,15 @@ async def _sso_login(page, username: str, password: str) -> None:
     prompt, which also lets Duo remember this browser for later logins.
     """
     _log("Submitting credentials...")
-    await page.locator("#ssousername").fill(username)
-    await page.locator("#ssopassword").fill(password)
-    await page.locator("button[type='submit']").click()
+    try:
+        await page.locator("#ssousername").fill(username)
+        await page.locator("#ssopassword").fill(password)
+        await page.locator("button[type='submit']").click()
+    except PlaywrightError:
+        # Never include str(e): Playwright's call log contains the filled password.
+        raise LoginError(
+            "Could not fill the SSO login form (page not ready or layout changed)."
+        ) from None
 
     loop = asyncio.get_running_loop()
     start = loop.time()

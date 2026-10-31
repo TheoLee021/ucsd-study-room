@@ -1,5 +1,6 @@
 # study_room/mcp_server.py
 import asyncio
+import re
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -75,16 +76,21 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="cancel_reservation",
             description=(
-                "Cancel a study room reservation. Requires date and reason. "
+                "Cancel a study room reservation. Requires reason plus either "
+                "reservation_id (preferred, from my_events) or date. "
                 "Ask the user to choose a cancel reason before calling. "
                 "Valid reasons: Bad Weather, Changed Date, Changed Location, "
                 "Lack of Funding, Lack of Interest, Lack of Resources, "
                 "Lack of Time to Plan, Other. "
-                "If multiple reservations on the same date, specify room_name."
+                "If multiple reservations match, call again with reservation_id."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "reservation_id": {
+                        "type": "string",
+                        "description": "Exact reservation ID from my_events (preferred)",
+                    },
                     "date": {"type": "string", "description": "Date (YYYY-MM-DD)"},
                     "reason": {
                         "type": "string",
@@ -92,10 +98,10 @@ async def list_tools() -> list[Tool]:
                     },
                     "room_name": {
                         "type": "string",
-                        "description": "Room name to disambiguate if multiple reservations on same date (optional)",
+                        "description": "Exact room name to narrow a date match (optional)",
                     },
                 },
-                "required": ["date", "reason"],
+                "required": ["reason"],
             },
         ),
         Tool(
@@ -174,10 +180,20 @@ async def _handle_tool(name: str, arguments: dict) -> list[TextContent]:
             return [TextContent(type="text", text="\n".join(lines))]
 
         elif name == "cancel_reservation":
+            date = arguments.get("date") or ""
+            reservation_id = arguments.get("reservation_id")
+            if not reservation_id and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+                return [
+                    TextContent(
+                        type="text",
+                        text="Provide reservation_id, or date in YYYY-MM-DD format.",
+                    )
+                ]
             result = await cancel_reservation(
-                arguments["date"],
+                date,
                 arguments.get("room_name"),
                 arguments["reason"],
+                reservation_id=reservation_id,
             )
 
             if result.status == "cancelled":
@@ -187,7 +203,7 @@ async def _handle_tool(name: str, arguments: dict) -> list[TextContent]:
                 for r in result.reservations:
                     lines.append(f"  - {r.room} | {r.status} (ID: {r.reservation_id})")
                 lines.append(
-                    "\nCall cancel_reservation again with 'room_name' to specify which one."
+                    "\nCall cancel_reservation again with 'reservation_id' to specify which one."
                 )
                 return [TextContent(type="text", text="\n".join(lines))]
             else:
@@ -214,7 +230,11 @@ async def _handle_tool(name: str, arguments: dict) -> list[TextContent]:
     except BookingError as e:
         return [TextContent(type="text", text=f"Booking failed: {e}")]
     except Exception as e:
-        return [TextContent(type="text", text=f"Error: {e}")]
+        # First line only: Playwright appends a call log that can echo filled values.
+        first_line = str(e).splitlines()[0] if str(e) else ""
+        return [
+            TextContent(type="text", text=f"Error: {type(e).__name__}: {first_line}")
+        ]
 
 
 async def main():

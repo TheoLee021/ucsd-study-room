@@ -425,8 +425,53 @@ async def my_events() -> list[Reservation]:
         return await _open_and_get_events(p)
 
 
+def _select_cancel_target(
+    candidates: list[dict],
+    date: str,
+    room_name: str | None,
+    reservation_id: str | None,
+) -> tuple[dict | None, CancelResult | None]:
+    """Pick exactly one row to cancel, or return a result explaining why not.
+
+    A reservation_id matches exactly. Otherwise the room must match exactly, and
+    any ambiguity returns needs_selection instead of guessing the first row.
+    """
+    if reservation_id:
+        matches = [
+            c for c in candidates if c["reservation"].reservation_id == reservation_id
+        ]
+        if not matches:
+            return None, CancelResult(
+                status="error",
+                message=f"No reservation found with ID {reservation_id}.",
+            )
+    else:
+        matches = [
+            c
+            for c in candidates
+            if date in c["reservation"].date
+            and (not room_name or c["reservation"].room == room_name)
+        ]
+        if not matches:
+            return None, CancelResult(
+                status="error", message=f"No reservation found for {date}."
+            )
+
+    if len(matches) > 1:
+        return None, CancelResult(
+            status="needs_selection",
+            message=f"Multiple reservations found for {date}. Please specify the reservation ID.",
+            reservations=[m["reservation"] for m in matches],
+        )
+    return matches[0], None
+
+
 async def _open_and_cancel(
-    playwright, date: str, room_name: str | None, reason: str
+    playwright,
+    date: str,
+    room_name: str | None,
+    reason: str,
+    reservation_id: str | None = None,
 ) -> CancelResult:
     """Navigate My Events → find reservation → cancel."""
     context = await get_authenticated_context(playwright)
@@ -449,7 +494,7 @@ async def _open_and_cancel(
         rows = page.locator("table.table tbody tr")
         count = await rows.count()
 
-        matching_rows = []
+        candidates = []
         for i in range(count):
             row = rows.nth(i)
             cols = row.locator("td")
@@ -463,38 +508,27 @@ async def _open_and_cancel(
                 if " - " in location_text
                 else location_text
             )
-            reservation_id = (await cols.nth(5).inner_text()).strip()
+            row_id = (await cols.nth(5).inner_text()).strip()
             status = (await cols.nth(6).inner_text()).strip()
 
-            if date in date_text:
-                if room_name and room_name not in room:
-                    continue
-                matching_rows.append(
-                    {
-                        "index": i,
-                        "reservation": Reservation(
-                            date=date_text,
-                            time="",
-                            room=room,
-                            status=status,
-                            reservation_id=reservation_id,
-                        ),
-                    }
-                )
-
-        if not matching_rows:
-            return CancelResult(
-                status="error", message=f"No reservation found for {date}."
+            candidates.append(
+                {
+                    "index": i,
+                    "reservation": Reservation(
+                        date=date_text,
+                        time="",
+                        room=room,
+                        status=status,
+                        reservation_id=row_id,
+                    ),
+                }
             )
 
-        if len(matching_rows) > 1 and room_name is None:
-            return CancelResult(
-                status="needs_selection",
-                message=f"Multiple reservations found for {date}. Please specify a room.",
-                reservations=[m["reservation"] for m in matching_rows],
-            )
-
-        target = matching_rows[0]
+        target, early = _select_cancel_target(
+            candidates, date, room_name, reservation_id
+        )
+        if early is not None:
+            return early
 
         # Click name link in cols[0] → navigate to ReservationSummary
         target_row = rows.nth(target["index"])
@@ -519,9 +553,22 @@ async def _open_and_cancel(
         await page.select_option("select", label=reason)
         await asyncio.sleep(1)
 
-        # Click "Yes, Cancel Reservation"
-        await page.locator("button:has-text('Yes, Cancel Reservation')").click()
-        await asyncio.sleep(3)
+        # Cancel Notes is required for some reasons (e.g. "Other")
+        notes = page.locator("textarea:visible")
+        if await notes.count() > 0:
+            await notes.first.fill(f"{reason} (cancelled via study-room)")
+
+        # Click "Yes, Cancel Reservation" and confirm the dialog actually closed
+        yes_button = page.locator("button:has-text('Yes, Cancel Reservation')")
+        await yes_button.click()
+        try:
+            await yes_button.wait_for(state="hidden", timeout=15000)
+        except PlaywrightError:
+            return CancelResult(
+                status="error",
+                message="Cancellation was not accepted by EMS (dialog still open).",
+            )
+        await asyncio.sleep(2)
 
         res = target["reservation"]
         return CancelResult(
@@ -541,17 +588,32 @@ def _format_date_for_match(date_iso: str) -> str:
 
 
 async def cancel_reservation(
-    date: str, room_name: str | None = None, reason: str = "Changed Date"
+    date: str,
+    room_name: str | None = None,
+    reason: str = "Changed Date",
+    reservation_id: str | None = None,
 ) -> CancelResult:
-    """Cancel a reservation by date. Optionally filter by room_name.
+    """Cancel exactly one reservation, preferably identified by reservation_id.
 
     Args:
         date: YYYY-MM-DD format (from CLI --date or MCP) or raw date text (from interactive picker).
+        reservation_id: exact EMS reservation ID; takes precedence over date/room matching.
     """
+    if reason not in CANCEL_REASONS:
+        return CancelResult(
+            status="error",
+            message=f"Invalid cancel reason. Choose one of: {', '.join(CANCEL_REASONS)}",
+        )
     # ISO format (YYYY-MM-DD) → convert to 'Mar 13, 2026'; otherwise pass through as-is
     if len(date) == 10 and date[4:5] == "-" and date[7:8] == "-":
         match_date = _format_date_for_match(date)
     else:
         match_date = date
+    if not match_date and not reservation_id:
+        return CancelResult(
+            status="error", message="A date or reservation ID is required."
+        )
     async with async_playwright() as p:
-        return await _open_and_cancel(p, match_date, room_name, reason)
+        return await _open_and_cancel(
+            p, match_date, room_name or None, reason, reservation_id or None
+        )

@@ -198,9 +198,11 @@ def cancel(
 
         date_for_cancel = selected.date  # raw date text from My Events table
         room_for_cancel = selected.room
+        id_for_cancel = selected.reservation_id
     else:
         date_for_cancel = date
         room_for_cancel = None
+        id_for_cancel = None
 
     # Step 2: If no reason, show reason picker
     if reason is None:
@@ -217,7 +219,9 @@ def cancel(
     # Step 3: Execute cancel
     try:
         result = asyncio.run(
-            cancel_reservation(date_for_cancel, room_for_cancel, reason)
+            cancel_reservation(
+                date_for_cancel, room_for_cancel, reason, reservation_id=id_for_cancel
+            )
         )
     except SessionExpiredError as e:
         console.print(f"[red]{e}[/red]")
@@ -235,8 +239,9 @@ def cancel(
         table.add_column("Date", style="green")
         table.add_column("Room", style="green")
         table.add_column("Status", style="yellow")
+        table.add_column("ID", style="dim")
         for i, r in enumerate(result.reservations, 1):
-            table.add_row(str(i), r.date, r.room, r.status)
+            table.add_row(str(i), r.date, r.room, r.status, r.reservation_id)
         console.print(table)
 
         choice = typer.prompt(f"Select [1-{len(result.reservations)}/n]", default="n")
@@ -250,7 +255,12 @@ def cancel(
             raise typer.Exit(1) from None
 
         result2 = asyncio.run(
-            cancel_reservation(date_for_cancel, selected.room, reason)
+            cancel_reservation(
+                date_for_cancel,
+                selected.room,
+                reason,
+                reservation_id=selected.reservation_id,
+            )
         )
         if result2.status == "cancelled":
             console.print(f"[green]{result2.message}[/green]")

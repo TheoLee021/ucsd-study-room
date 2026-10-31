@@ -145,3 +145,32 @@ def test_duo_trust_state_keeps_only_duo(tmp_path):
         "https://api-x.duosecurity.com"
     ]
     assert _duo_trust_state(tmp_path / "nowhere" / "session.json") is None
+
+
+def test_sso_login_fill_error_does_not_leak_password():
+    import pytest
+    from playwright.async_api import Error as PlaywrightError
+
+    from study_room.auth import LoginError, _sso_login
+
+    secret = "DUMMY-SECRET-7f3a"
+
+    class FakeLocator:
+        def __init__(self, selector):
+            self.selector = selector
+
+        async def fill(self, value):
+            if self.selector == "#ssopassword":
+                raise PlaywrightError(f'Timeout\nCall log:\n  - fill("{value}")')
+
+        async def click(self):
+            pass
+
+    class FakePage:
+        def locator(self, selector):
+            return FakeLocator(selector)
+
+    with pytest.raises(LoginError) as exc:
+        asyncio.run(_sso_login(FakePage(), "user", secret))
+    assert secret not in str(exc.value)
+    assert exc.value.__cause__ is None
