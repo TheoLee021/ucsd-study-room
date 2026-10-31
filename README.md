@@ -120,7 +120,7 @@ study-room config --name "Your Name" --email "you@ucsd.edu"
 study-room login
 ```
 
-A Chrome window will open. Enter your UCSD SSO credentials when prompted, then approve the Duo Push notification on your phone. Your session and credentials are saved for future use.
+Enter your UCSD SSO credentials when prompted, then approve the Duo Push notification on your phone. Login runs in a headless browser — no window opens. Your session and credentials are saved for future use.
 
 ## MCP Server Setup
 
@@ -166,7 +166,7 @@ Once configured, you can use natural language to manage bookings:
 
 | Command                    | Description                                                      |
 | -------------------------- | ---------------------------------------------------------------- |
-| `study-room login`         | SSO login with Duo Push (opens browser for first-time auth)      |
+| `study-room login`         | SSO login with Duo Push (headless)                               |
 | `study-room search`        | Search available rooms with `--date`, `--start`, `--end` options |
 | `study-room search --book` | Search and book a room interactively                             |
 | `study-room cancel`        | Cancel a reservation interactively or with `--date`, `--reason`  |
@@ -200,9 +200,9 @@ study-room cancel --date 2026-03-13 --reason "Changed Date"
 ## How It Works
 
 1. **Browser automation** -- Uses Playwright with real Chrome (`channel="chrome"`) in headless mode to interact with the EMS Cloud booking system.
-2. **Authentication** -- Navigates to the UCSD SAML SSO page, submits credentials, and waits for Duo Push approval. On first login, a headed browser window opens for the Duo flow.
+2. **Authentication** -- Navigates to the UCSD SAML SSO page, submits credentials, and waits for Duo Push approval. The whole flow, including Duo's "trust this device" prompt, runs headless.
 3. **Session management** -- After authentication, cookies and browser storage state are saved to `~/.study-room/`. Credentials are stored in the system keyring via the `keyring` library (macOS Keychain, Windows Credential Locker, or Linux SecretService). Sessions are valid for 7 days.
-4. **Auto re-login** -- When a session expires during a search or booking operation, the tool automatically opens a headed browser, loads credentials from the system keyring, and re-authenticates with Duo Push.
+4. **Auto re-login** -- When a session expires during a search or booking operation, the tool loads credentials from the system keyring and re-authenticates with Duo Push in the same headless browser.
 5. **Room search** -- Navigates to the EMS booking page, fills in date and time fields, and parses available rooms by inspecting the DOM for booking buttons.
 6. **Booking** -- Clicks the add-to-cart button for the selected room, fills in the reservation form (name, email, terms), and submits the reservation.
 7. **Cancellation** -- Navigates to My Events, clicks the reservation link, selects a cancel reason from the dropdown, and confirms the cancellation.

@@ -6,7 +6,7 @@ from rich.console import Console
 from rich.table import Table
 
 from study_room.config import load_config, save_config, CONFIG_PATH
-from study_room.auth import login as auth_login, is_session_valid, SessionExpiredError
+from study_room.auth import login as auth_login, is_session_valid, SessionExpiredError, LoginError
 from study_room.booking import search_rooms, search_and_book, my_events, cancel_reservation, Room, Reservation, CancelResult, CANCEL_REASONS, BookingError
 from study_room.updater import get_current_version, check_pypi_latest, run_update, get_update_notice
 
@@ -34,7 +34,11 @@ def login(
     password: str = typer.Option(..., prompt=True, hide_input=True),
 ):
     """SSO login + Duo Push authentication."""
-    asyncio.run(auth_login(username, password))
+    try:
+        asyncio.run(auth_login(username, password))
+    except LoginError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
 
 @app.command()

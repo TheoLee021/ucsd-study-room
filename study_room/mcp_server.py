@@ -14,7 +14,7 @@ from study_room.booking import (
     DateUnavailableError,
     BookingError,
 )
-from study_room.auth import login as auth_login, is_session_valid
+from study_room.auth import login as auth_login, is_session_valid, LoginError
 from study_room.updater import get_update_notice
 
 server = Server("study-room")
@@ -168,6 +168,8 @@ async def _handle_tool(name: str, arguments: dict) -> list[TextContent]:
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
+    except LoginError as e:
+        return [TextContent(type="text", text=f"Login failed: {e}")]
     except SessionExpiredError as e:
         return [TextContent(type="text", text=f"Session expired: {e}\nPlease use the login tool first.")]
     except DateUnavailableError as e:

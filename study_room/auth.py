@@ -1,8 +1,10 @@
+import asyncio
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import keyring
+from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import async_playwright
 
 SESSION_DIR = Path.home() / ".study-room"
@@ -61,36 +63,70 @@ def is_session_valid(path: Path = SESSION_PATH) -> bool:
     return datetime.now() - created < timedelta(days=SESSION_MAX_AGE_DAYS)
 
 
+class SessionExpiredError(Exception):
+    pass
+
+
+class LoginError(SessionExpiredError):
+    pass
+
+
+def _on_ems(url: str) -> bool:
+    return "emscloudservice.com/web/" in url and "samlauth" not in url
+
+
+async def _sso_login(page, username: str, password: str) -> None:
+    """Fill the UCSD SSO form, then wait for Duo Push approval and the EMS redirect.
+
+    Duo sends the push automatically. Clicks "Yes, this is my device" on the trust
+    prompt so it works headless.
+    """
+    await page.locator("#ssousername").fill(username)
+    await page.locator("#ssopassword").fill(password)
+    await page.locator("button[type='submit']").click()
+    print("Duo Push sent. Please approve on your phone...")
+
+    trust_button = page.get_by_role("button", name="Yes, this is my device")
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + DUO_TIMEOUT_MS / 1000
+    sso_error_check_after = loop.time() + 5
+    while loop.time() < deadline:
+        await asyncio.sleep(0.5)
+        if _on_ems(page.url):
+            await page.wait_for_load_state("networkidle")
+            return
+        try:
+            if await trust_button.count() > 0:
+                await trust_button.click()
+            # Still on the SSO form after submit → wrong username/password
+            elif loop.time() > sso_error_check_after and await page.locator("#ssousername").is_visible():
+                raise LoginError("SSO login failed. Check your username/password and run 'study-room login'.")
+        except PlaywrightError:
+            continue  # page navigating mid-check
+    raise LoginError("Timed out waiting for Duo approval.")
+
+
+async def _save_storage(context, session_path: Path) -> list:
+    cookies = await context.cookies()
+    save_session(cookies, session_path)
+    await context.storage_state(path=str(session_path.parent / "storage_state.json"))
+    return cookies
+
+
 async def login(username: str, password: str, session_path: Path = SESSION_PATH) -> list:
-    """SSO login + Duo Push authentication. Saves cookies on success."""
+    """Headless SSO login + Duo Push authentication. Saves credentials and cookies on success."""
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False, channel="chrome")
+        browser = await p.chromium.launch(headless=True, channel="chrome")
         context = await browser.new_context()
         page = await context.new_page()
 
-        # 1. Navigate to SAML auth page → redirects to UCSD SSO
         await page.goto(SAML_URL)
         await page.wait_for_load_state("networkidle")
-
-        # 2. UCSD SSO login — username + password
         await page.wait_for_selector("#ssousername", timeout=15000)
-        await page.locator("#ssousername").fill(username)
-        await page.locator("#ssopassword").fill(password)
-        await page.locator("button[type='submit']").click()
+        await _sso_login(page, username, password)
 
-        # 3. Wait for Duo Push — authentication complete when redirected to EMS
-        print("Duo Push sent. Please approve on your phone...")
-        await page.wait_for_url("**/web/**", timeout=DUO_TIMEOUT_MS)
-
-        # 4. Save credentials to keychain
         save_credentials(username, password)
-
-        # 5. Save full storage state (cookies + localStorage + sessionStorage)
-        cookies = await context.cookies()
-        save_session(cookies, session_path)
-
-        storage_state_path = session_path.parent / "storage_state.json"
-        await context.storage_state(path=str(storage_state_path))
+        cookies = await _save_storage(context, session_path)
         print(f"Login successful! {len(cookies)} cookies + storage state saved.")
 
         await browser.close()
@@ -98,8 +134,13 @@ async def login(username: str, password: str, session_path: Path = SESSION_PATH)
 
 
 async def get_authenticated_context(playwright, session_path: Path = SESSION_PATH, headless: bool = True, channel: str | None = "chrome"):
-    """Return an authenticated browser context using saved storage state."""
-    if not is_session_valid(session_path):
+    """Return a browser context with saved storage state.
+
+    If the session is stale but keychain credentials exist, returns a blank context
+    and lets authenticate() log in headlessly. Returns None if neither is available.
+    """
+    session_valid = is_session_valid(session_path)
+    if not session_valid and load_credentials() is None:
         return None
 
     storage_state_path = session_path.parent / "storage_state.json"
@@ -108,7 +149,9 @@ async def get_authenticated_context(playwright, session_path: Path = SESSION_PAT
         launch_args["channel"] = channel
     browser = await playwright.chromium.launch(**launch_args)
 
-    if storage_state_path.exists():
+    if not session_valid:
+        context = await browser.new_context()
+    elif storage_state_path.exists():
         context = await browser.new_context(storage_state=str(storage_state_path))
     else:
         session = load_session(session_path)
@@ -118,74 +161,23 @@ async def get_authenticated_context(playwright, session_path: Path = SESSION_PAT
     return context
 
 
-async def _headed_login_and_save(session_path: Path = SESSION_PATH):
-    """Re-login via headed browser when SSO expires. Auto-fills from keychain if available."""
-    import asyncio
-
-    creds = load_credentials()
-
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False, channel="chrome")
-        context = await browser.new_context()
-        page = await context.new_page()
-
-        await page.goto(SAML_URL)
-        await page.wait_for_load_state("networkidle")
-
-        await page.wait_for_selector("#ssousername", timeout=15000)
-
-        if creds:
-            username, password = creds
-            print("Loaded credentials from keychain. Auto-filling...")
-            await page.locator("#ssousername").fill(username)
-            await page.locator("#ssopassword").fill(password)
-            await page.locator("button[type='submit']").click()
-        else:
-            print("No credentials in keychain. Please log in manually in the browser.")
-
-        print("Duo Push sent. Please approve on your phone...")
-        await page.wait_for_url("**/web/**", timeout=DUO_TIMEOUT_MS)
-
-        # Save session
-        cookies = await context.cookies()
-        save_session(cookies, session_path)
-        storage_state_path = session_path.parent / "storage_state.json"
-        await context.storage_state(path=str(storage_state_path))
-        print("Re-login successful! Session renewed.")
-
-        await browser.close()
-
-
-async def authenticate(page, session_path: Path = SESSION_PATH):
-    """SAML authentication. Auto-passes if SSO is valid, opens headed browser for Duo if expired."""
-    import asyncio
-
+async def authenticate(page, session_path: Path = SESSION_PATH) -> None:
+    """SAML authentication. Auto-passes if SSO is valid, otherwise logs in headlessly from keychain."""
     print("Authenticating via SAML...")
 
     await page.goto(SAML_URL)
     await page.wait_for_load_state("networkidle")
     await asyncio.sleep(2)
 
-    # Check if SSO login page appeared
-    sso_form = page.locator("#ssousername")
-    if await sso_form.count() > 0:
-        # SSO expired — open headed browser for Duo auth
-        print("SSO session expired. Opening browser for login...")
-        await page.context.browser.close()
-        await _headed_login_and_save(session_path)
-        return "relogin_needed"
+    if await page.locator("#ssousername").count() > 0:
+        creds = load_credentials()
+        if creds is None:
+            raise SessionExpiredError("SSO session expired. Please run 'study-room login'.")
+        print("SSO session expired. Logging in with saved credentials...")
+        await _sso_login(page, *creds)
+    else:
+        # SSO valid → auto-redirects to EMS
+        await page.wait_for_url("**/web/**", timeout=15000)
 
-    # SSO valid → auto-redirects to EMS
-    await page.wait_for_url("**/web/**", timeout=15000)
-
-    # Refresh storage state
-    context = page.context
-    cookies = await context.cookies()
-    save_session(cookies, session_path)
-    storage_state_path = session_path.parent / "storage_state.json"
-    await context.storage_state(path=str(storage_state_path))
+    await _save_storage(page.context, session_path)
     print("Authentication complete.")
-
-
-class SessionExpiredError(Exception):
-    pass

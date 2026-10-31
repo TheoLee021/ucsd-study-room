@@ -88,23 +88,16 @@ async def _check_search_loaded(page: Page) -> bool:
     return await room_results.count() > 0
 
 
-async def _search_with_retry(page: Page, date: str, start_time: str, end_time: str) -> Page:
-    """SAML auth → search + retry with re-login on failure. Returns None if headed re-login occurred."""
-    result = await authenticate(page)
-    if result == "relogin_needed":
-        return None  # caller retries with new context
-
+async def _search_with_retry(page: Page, date: str, start_time: str, end_time: str) -> None:
+    """SAML auth → search, re-authenticating once if results fail to load."""
+    await authenticate(page)
     await _navigate_to_search(page, date, start_time, end_time)
 
     if not await _check_search_loaded(page):
-        result = await authenticate(page)
-        if result == "relogin_needed":
-            return None
+        await authenticate(page)
         await _navigate_to_search(page, date, start_time, end_time)
         if not await _check_search_loaded(page):
             raise BookingError("Failed to load search results. Please try again later.")
-
-    return page
 
 
 async def _parse_available_rooms(page: Page, target_rooms: set[str]) -> list[Room]:
@@ -138,21 +131,17 @@ def _format_time(time_24h: str) -> str:
 
 
 async def _open_and_search(playwright, date: str, start_time: str, end_time: str, target_rooms: set[str]) -> list[Room]:
-    """Headless browser search. Recursively retries if headed re-login occurs."""
+    """Headless browser search."""
     context = await get_authenticated_context(playwright, headless=True)
     if context is None:
         raise SessionExpiredError("Session expired. Please run 'study-room login'.")
 
     page = await context.new_page()
     try:
-        page = await _search_with_retry(page, date, start_time, end_time)
-        if page is None:
-            # Headed re-login complete → retry with new context
-            return await _open_and_search(playwright, date, start_time, end_time, target_rooms)
+        await _search_with_retry(page, date, start_time, end_time)
         return await _parse_available_rooms(page, target_rooms)
     finally:
-        if page and page.context.browser.is_connected():
-            await page.context.browser.close()
+        await context.browser.close()
 
 
 async def search_rooms(date: str, start_time: str, end_time: str) -> list[Room]:
@@ -168,7 +157,7 @@ async def search_rooms(date: str, start_time: str, end_time: str) -> list[Room]:
 
 
 async def _open_search_and_book(playwright, date: str, start_time: str, end_time: str, room_name: str, config: dict) -> str:
-    """Headless browser search + book. Recursively retries if headed re-login occurs."""
+    """Headless browser search + book."""
     formatted_start = _format_time(start_time.replace("/", ":")) if "/" in start_time else start_time
     formatted_end = _format_time(end_time.replace("/", ":")) if "/" in end_time else end_time
 
@@ -178,9 +167,7 @@ async def _open_search_and_book(playwright, date: str, start_time: str, end_time
 
     page = await context.new_page()
     try:
-        page = await _search_with_retry(page, date, start_time, end_time)
-        if page is None:
-            return await _open_search_and_book(playwright, date, start_time, end_time, room_name, config)
+        await _search_with_retry(page, date, start_time, end_time)
 
         # Check room availability + click
         add_btn = page.locator(f'i.book-add-to-cart[aria-label*="{room_name}"]')
@@ -206,8 +193,7 @@ async def _open_search_and_book(playwright, date: str, start_time: str, end_time
 
         return f"Booking confirmed: {room_name}"
     finally:
-        if page and page.context.browser.is_connected():
-            await page.context.browser.close()
+        await context.browser.close()
 
 
 async def book_room(date: str, start_time: str, end_time: str, room_name: str) -> str:
@@ -225,16 +211,14 @@ async def book_room(date: str, start_time: str, end_time: str, room_name: str) -
 
 
 async def _open_search_and_book_interactive(playwright, date: str, start_time: str, end_time: str, target_rooms: set[str], config: dict, room_selector=None) -> str:
-    """Headless browser search → select → book. Recursively retries if headed re-login occurs."""
+    """Headless browser search → select → book."""
     context = await get_authenticated_context(playwright, headless=True)
     if context is None:
         raise SessionExpiredError("Session expired. Please run 'study-room login'.")
 
     page = await context.new_page()
     try:
-        page = await _search_with_retry(page, date, start_time, end_time)
-        if page is None:
-            return await _open_search_and_book_interactive(playwright, date, start_time, end_time, target_rooms, config, room_selector)
+        await _search_with_retry(page, date, start_time, end_time)
 
         rooms = await _parse_available_rooms(page, target_rooms)
 
@@ -269,8 +253,7 @@ async def _open_search_and_book_interactive(playwright, date: str, start_time: s
 
         return f"Booking confirmed: {selected.name} ({date} {start_time}-{end_time})"
     finally:
-        if page and page.context.browser.is_connected():
-            await page.context.browser.close()
+        await context.browser.close()
 
 
 async def search_and_book(date: str, start_time: str, end_time: str, room_selector=None) -> str:
@@ -305,9 +288,7 @@ async def _open_and_get_events(playwright) -> list[Reservation]:
         await page.goto(MY_EVENTS_URL)
         await page.wait_for_load_state("networkidle")
 
-        result = await authenticate(page)
-        if result == "relogin_needed":
-            return await _open_and_get_events(playwright)
+        await authenticate(page)
 
         await page.goto(MY_EVENTS_URL)
         await page.wait_for_load_state("networkidle")
@@ -373,8 +354,7 @@ async def _open_and_get_events(playwright) -> list[Reservation]:
 
         return reservations
     finally:
-        if page and page.context.browser.is_connected():
-            await page.context.browser.close()
+        await context.browser.close()
 
 
 async def my_events() -> list[Reservation]:
@@ -384,7 +364,7 @@ async def my_events() -> list[Reservation]:
 
 
 async def _open_and_cancel(playwright, date: str, room_name: str | None, reason: str) -> CancelResult:
-    """Navigate My Events → find reservation → cancel. Recursively retries on headed re-login."""
+    """Navigate My Events → find reservation → cancel."""
     context = await get_authenticated_context(playwright, headless=True)
     if context is None:
         raise SessionExpiredError("Session expired. Please run 'study-room login' first.")
@@ -394,9 +374,7 @@ async def _open_and_cancel(playwright, date: str, room_name: str | None, reason:
         await page.goto(MY_EVENTS_URL)
         await page.wait_for_load_state("networkidle")
 
-        result = await authenticate(page)
-        if result == "relogin_needed":
-            return await _open_and_cancel(playwright, date, room_name, reason)
+        await authenticate(page)
 
         await page.goto(MY_EVENTS_URL)
         await page.wait_for_load_state("networkidle")
@@ -472,8 +450,7 @@ async def _open_and_cancel(playwright, date: str, room_name: str | None, reason:
             message=f"Cancelled: {res.room} on {res.date} (ID: {res.reservation_id}).",
         )
     finally:
-        if page and page.context.browser.is_connected():
-            await page.context.browser.close()
+        await context.browser.close()
 
 
 def _format_date_for_match(date_iso: str) -> str:
