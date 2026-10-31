@@ -20,12 +20,14 @@ Claude Code, Codex CLI, Gemini CLI, Cursor 등 MCP 호환 클라이언트에서 
 
 ### Claude Code (추천)
 
-플러그인으로 설치 — 수동 설정 없이 자동 업데이트 포함:
+플러그인으로 설치 — 수동 설정 없이 바로 사용:
 
 ```bash
 claude /plugin marketplace add TheoLee021/claude-plugins
 claude /plugin install ucsd-study-room
 ```
+
+MCP 서버는 실행할 때마다 PyPI에서 최신 버전을 받습니다. 플러그인(스킬) 업데이트도 자동으로 받으려면 `/plugin` → **Marketplaces** → `theo-plugins` 선택 → **Enable auto-update**를 켜세요. 수동으로는 `/plugin marketplace update theo-plugins`로 업데이트할 수 있습니다.
 
 계정 설정:
 
