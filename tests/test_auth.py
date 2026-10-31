@@ -45,12 +45,17 @@ def test_is_session_valid_with_expired_session(tmp_path):
 DUO_URL = "https://api-ce13a1a7.duosecurity.com/prompt/XYZ?authkey=ABC"
 
 
+EMS_URL = "https://ucsdevents.emscloudservice.com/web/Default.aspx"
+SAML_URL = "https://ucsdevents.emscloudservice.com/web/samlauth.aspx"
+SSO_URL = "https://a5.ucsd.edu/tritON/profile/SAML2/Redirect/SSO?execution=e1s2"
+
+
 def test_classify_ems():
-    assert classify_page("https://ucsdevents.emscloudservice.com/web/Default.aspx", "") == "ems"
+    assert classify_page(EMS_URL, "") == "ems"
 
 
 def test_classify_saml_page_is_not_ems():
-    assert classify_page("https://ucsdevents.emscloudservice.com/web/samlauth.aspx", "") == "unknown"
+    assert classify_page(SAML_URL, "") == "unknown"
 
 
 def test_classify_duo_push():
@@ -63,7 +68,7 @@ def test_classify_duo_trust():
 
 def test_classify_sso_form():
     html = '<input id="ssousername" name="j_username">'
-    assert classify_page("https://a5.ucsd.edu/tritON/profile/SAML2/Redirect/SSO?execution=e1s2", html) == "sso_form"
+    assert classify_page(SSO_URL, html) == "sso_form"
 
 
 def test_classify_sso_error():
@@ -72,7 +77,7 @@ def test_classify_sso_error():
         "The password you entered was incorrect.</div>"
         '<input id="ssousername" name="j_username">'
     )
-    assert classify_page("https://a5.ucsd.edu/tritON/profile/SAML2/Redirect/SSO?execution=e1s2", html) == "sso_error"
+    assert classify_page(SSO_URL, html) == "sso_error"
 
 
 def test_classify_unknown():

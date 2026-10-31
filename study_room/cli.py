@@ -7,7 +7,8 @@ from rich.console import Console
 from rich.table import Table
 
 from study_room.config import load_config, save_config, CONFIG_PATH
-from study_room.auth import login as auth_login, is_session_valid, SessionExpiredError, LoginError
+from study_room.auth import LoginError, SessionExpiredError, is_session_valid
+from study_room.auth import login as auth_login
 from study_room.auth import console as auth_console
 from study_room.booking import search_rooms, search_and_book, my_events, cancel_reservation, Room, Reservation, CancelResult, CANCEL_REASONS, BookingError
 from study_room.updater import get_current_version, check_pypi_latest, run_update, get_update_notice
@@ -34,19 +35,22 @@ console = Console()
 def login(
     username: str = typer.Option(..., prompt=True),
     password: str = typer.Option(..., prompt=True, hide_input=True),
-    headed: bool = typer.Option(False, "--headed", help="Show the browser window (debugging)"),
+    headed: bool = typer.Option(
+        False, "--headed", help="Show the browser window (debugging)"
+    ),
 ):
     """SSO login + Duo Push authentication."""
     try:
         with auth_console.status("Logging in..."):
-            asyncio.run(auth_login(username, password, headless=False if headed else None))
+            headless = False if headed else None
+            asyncio.run(auth_login(username, password, headless=headless))
     except LoginError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except PlaywrightError as e:
-        # Network/browser failures (e.g. EMS not responding): one line instead of a traceback
+        # Network/browser failures (e.g. EMS not responding): one line, no traceback
         console.print(f"[red]Login failed: {str(e).splitlines()[0]}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()

@@ -22,7 +22,8 @@ KEYRING_SERVICE = "study-room-booking"
 KEYRING_USERNAME_KEY = "ucsd-sso-username"
 
 
-# stderr: stdout is the MCP stdio protocol channel. The CLI shares this console for its spinner.
+# stderr: stdout is the MCP stdio protocol channel.
+# The CLI shares this console for its spinner.
 console = Console(stderr=True, highlight=False)
 DUO_REMINDER_EVERY_S = 15
 
@@ -98,7 +99,10 @@ def _on_ems(url: str) -> bool:
 
 
 def classify_page(url: str, html: str) -> str:
-    """Login state of the current page: ems | duo_trust | duo | sso_error | sso_form | unknown."""
+    """Login state of the current page.
+
+    One of: ems | duo_trust | duo | sso_error | sso_form | unknown.
+    """
     if _on_ems(url):
         return "ems"
     if "duosecurity.com" in url:
@@ -165,17 +169,20 @@ async def _sso_login(page, username: str, password: str) -> None:
                 if next_reminder is None:
                     next_reminder = loop.time() + DUO_REMINDER_EVERY_S
                 elif loop.time() >= next_reminder:
-                    _log(f"Still waiting for Duo... ({int(loop.time() - start)}s / {LOGIN_TIMEOUT_S}s)")
+                    waited = int(loop.time() - start)
+                    _log(f"Still waiting for Duo... ({waited}s / {LOGIN_TIMEOUT_S}s)")
                     next_reminder += DUO_REMINDER_EVERY_S
             if state == "ems":
                 await page.wait_for_load_state("networkidle")
                 return
             if state == "duo_trust" and not trust_clicked:
-                await page.get_by_role("button", name="Yes, this is my device").click(timeout=5000)
+                trust_button = page.get_by_role("button", name="Yes, this is my device")
+                await trust_button.click(timeout=5000)
                 trust_clicked = True
             elif state == "sso_error":
-                # Report the SSO server's own message (wrong password, locked account, ...)
-                reason = (await page.locator("#_login_error_message").inner_text()).strip()
+                # Report the SSO server's own message (wrong password, locked account...)
+                error_box = page.locator("#_login_error_message")
+                reason = (await error_box.inner_text()).strip()
                 raise LoginError(f"SSO login failed: {reason}")
         except PlaywrightError:
             continue  # page navigating mid-check
@@ -209,19 +216,30 @@ def _duo_trust_state(session_path: Path) -> dict | None:
         return None
     state = json.loads(path.read_text())
     return {
-        "cookies": [c for c in state.get("cookies", []) if "duosecurity.com" in c["domain"]],
-        "origins": [o for o in state.get("origins", []) if "duosecurity.com" in o["origin"]],
+        "cookies": [
+            c for c in state.get("cookies", []) if "duosecurity.com" in c["domain"]
+        ],
+        "origins": [
+            o for o in state.get("origins", []) if "duosecurity.com" in o["origin"]
+        ],
     }
 
 
-async def login(username: str, password: str, session_path: Path = SESSION_PATH, headless: bool | None = None) -> list:
-    """Headless SSO login + Duo Push authentication. Saves credentials and cookies on success."""
+async def login(
+    username: str,
+    password: str,
+    session_path: Path = SESSION_PATH,
+    headless: bool | None = None,
+) -> list:
+    """Headless SSO login + Duo Push. Saves credentials and cookies on success."""
     if headless is None:
         headless = _headless()
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless, channel="chrome")
-        # Fresh SSO session (user may switch accounts), but keep Duo's "remember this browser" cookie
-        context = await browser.new_context(storage_state=_duo_trust_state(session_path))
+        # Fresh SSO session (user may switch accounts),
+        # but keep Duo's "remember this browser" cookie
+        trust_state = _duo_trust_state(session_path)
+        context = await browser.new_context(storage_state=trust_state)
         page = await context.new_page()
 
         _log("Opening UCSD SSO login page...")
@@ -238,7 +256,12 @@ async def login(username: str, password: str, session_path: Path = SESSION_PATH,
         return cookies
 
 
-async def get_authenticated_context(playwright, session_path: Path = SESSION_PATH, headless: bool | None = None, channel: str | None = "chrome"):
+async def get_authenticated_context(
+    playwright,
+    session_path: Path = SESSION_PATH,
+    headless: bool | None = None,
+    channel: str | None = "chrome",
+):
     """Return a browser context with saved storage state.
 
     If the session is stale but keychain credentials exist, still loads the saved state
@@ -268,7 +291,10 @@ async def get_authenticated_context(playwright, session_path: Path = SESSION_PAT
 
 
 async def authenticate(page, session_path: Path = SESSION_PATH) -> None:
-    """SAML authentication. Auto-passes if SSO is valid, otherwise logs in headlessly from keychain."""
+    """SAML authentication.
+
+    Auto-passes if SSO is valid, otherwise logs in headlessly from keychain.
+    """
     _log("Authenticating via SAML...")
 
     await page.goto(SAML_URL)
@@ -278,7 +304,9 @@ async def authenticate(page, session_path: Path = SESSION_PATH) -> None:
     if await page.locator("#ssousername").count() > 0:
         creds = load_credentials()
         if creds is None:
-            raise SessionExpiredError("SSO session expired. Please run 'study-room login'.")
+            raise SessionExpiredError(
+                "SSO session expired. Please run 'study-room login'."
+            )
         _log("SSO session expired. Logging in with saved credentials...")
         await _sso_login(page, *creds)
     else:
