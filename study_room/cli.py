@@ -111,7 +111,7 @@ def search(
     else:
         # search only
         try:
-            rooms = asyncio.run(search_rooms(date, start, end))
+            result = asyncio.run(search_rooms(date, start, end))
         except SessionExpiredError as e:
             console.print(f"[red]{e}[/red]")
             raise typer.Exit(1) from None
@@ -119,8 +119,9 @@ def search(
             console.print(f"[yellow]{e}[/yellow]")
             raise typer.Exit(1) from None
 
+        rooms = result.bookable_rooms
         if not rooms:
-            console.print("[yellow]No rooms available for the selected time.[/yellow]")
+            console.print(f"[yellow]{result.no_bookable_message()}[/yellow]")
             raise typer.Exit(0)
 
         table = Table(title="Available Rooms (Price Center)")
@@ -129,6 +130,11 @@ def search(
         for i, room in enumerate(rooms, 1):
             table.add_row(str(i), room.name)
         console.print(table)
+        if not result.detailed:
+            console.print(
+                "[dim]Note: EMS availability data could not be read; "
+                "showing bookable rooms only.[/dim]"
+            )
 
 
 @app.command()

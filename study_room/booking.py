@@ -1,6 +1,10 @@
 import asyncio
+import json
 import platform
-from dataclasses import dataclass
+import sys
+from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import date, datetime, time, timedelta
 
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page, async_playwright
@@ -15,11 +19,65 @@ from study_room.config import load_config
 
 _SELECT_ALL = "Meta+a" if platform.system() == "Darwin" else "Control+a"
 
+# EMS endpoints the room search page calls to render its results.
+_ROOMS_API = "GetBrowseLocationsRoomsForRoomRequest"
+_BOOKINGS_API = "GetBrowseLocationsBookingsForRoomRequest"
+_API_TIMEOUT_MS = 15000
+_RESULTS_SELECTOR = (
+    ".column-text.available a.location, .column-text.unavailable a.location"
+)
+
+# EMS `UnavailableReason` codes (undocumented; observed on the live site).
+REASON_NONE = 0
+REASON_CONFLICT = 1  # another booking overlaps the requested time
+REASON_HAS_BOOKING_THAT_DAY = 11  # you already have a reservation that day
+
 
 @dataclass
 class Room:
     name: str
     available: bool
+    bookable: bool = True
+    unavailable_reason: int = REASON_NONE
+
+
+@dataclass
+class SearchResult:
+    rooms: list[Room]  # rooms free at the requested time
+    my_bookings: list[str] = field(default_factory=list)  # yours on that date
+    detailed: bool = True  # False: availability data unread, only bookable rooms known
+
+    @property
+    def bookable_rooms(self) -> list[Room]:
+        return [r for r in self.rooms if r.bookable]
+
+    @property
+    def blocked_rooms(self) -> list[Room]:
+        return [r for r in self.rooms if not r.bookable]
+
+    def blocked_reason(self, room: Room) -> str:
+        code = room.unavailable_reason
+        if code == REASON_HAS_BOOKING_THAT_DAY and self.my_bookings:
+            return (
+                "you already have a reservation that day ("
+                + "; ".join(self.my_bookings)
+                + ")"
+            )
+        if code == REASON_CONFLICT:
+            return "it overlaps another booking"
+        return f"EMS reason code {code}"
+
+    def blocked_message(self) -> str | None:
+        """Explain rooms that are free but cannot be booked, if any."""
+        blocked = self.blocked_rooms
+        if not blocked:
+            return None
+        names = ", ".join(r.name for r in blocked)
+        reasons = "; ".join(dict.fromkeys(self.blocked_reason(r) for r in blocked))
+        return f"Free but not bookable: {names} - {reasons}."
+
+    def no_bookable_message(self) -> str:
+        return self.blocked_message() or "No rooms available for the selected time."
 
 
 @dataclass
@@ -87,8 +145,14 @@ async def _goto_ems(page: Page, url: str) -> None:
     await _dismiss_cookie_banner(page)
 
 
-async def _navigate_to_search(page: Page, date: str, start_time: str, end_time: str):
-    """EMS main → Book Now → fill date/time → click Search."""
+async def _navigate_to_search(
+    page: Page, date: str, start_time: str, end_time: str
+) -> tuple[dict, dict] | None:
+    """EMS main → Book Now → fill date/time → click Search.
+
+    Returns the (rooms, bookings) API payloads behind the results,
+    or None if they could not be captured.
+    """
     await _goto_ems(page, EMS_URL)
     await asyncio.sleep(1)
 
@@ -103,31 +167,50 @@ async def _navigate_to_search(page: Page, date: str, start_time: str, end_time: 
     await _fill_input(page, "#end-time-input", end_time)
     await asyncio.sleep(0.5)
 
-    await page.locator("button.find-a-room").first.click()
+    payloads = None
+    try:
+        async with (
+            page.expect_response(
+                lambda r: _ROOMS_API in r.url, timeout=_API_TIMEOUT_MS
+            ) as rooms_info,
+            page.expect_response(
+                lambda r: _BOOKINGS_API in r.url, timeout=_API_TIMEOUT_MS
+            ) as bookings_info,
+        ):
+            await page.locator("button.find-a-room").first.click()
+        rooms_resp = await rooms_info.value
+        bookings_resp = await bookings_info.value
+        payloads = (await rooms_resp.json(), await bookings_resp.json())
+    except (PlaywrightError, ValueError):
+        pass
     await page.wait_for_load_state("networkidle")
-    await asyncio.sleep(3)
+    return payloads
 
 
 async def _check_search_loaded(page: Page) -> bool:
-    """Check if search results loaded successfully."""
-    room_results = page.locator(
-        ".column-text.available a.location, .column-text.unavailable a.location"
-    )
-    return await room_results.count() > 0
+    """Wait for the search results to render."""
+    try:
+        await page.locator(_RESULTS_SELECTOR).first.wait_for(
+            state="attached", timeout=10000
+        )
+        return True
+    except PlaywrightError:
+        return False
 
 
 async def _search_with_retry(
     page: Page, date: str, start_time: str, end_time: str
-) -> None:
+) -> tuple[dict, dict] | None:
     """SAML auth → search, re-authenticating once if results fail to load."""
     await authenticate(page)
-    await _navigate_to_search(page, date, start_time, end_time)
+    payloads = await _navigate_to_search(page, date, start_time, end_time)
 
     if not await _check_search_loaded(page):
         await authenticate(page)
-        await _navigate_to_search(page, date, start_time, end_time)
+        payloads = await _navigate_to_search(page, date, start_time, end_time)
         if not await _check_search_loaded(page):
             raise BookingError("Failed to load search results. Please try again later.")
+    return payloads
 
 
 async def _parse_available_rooms(page: Page, target_rooms: set[str]) -> list[Room]:
@@ -138,6 +221,119 @@ async def _parse_available_rooms(page: Page, target_rooms: set[str]) -> list[Roo
         if await add_btn.count() > 0 and await add_btn.first.is_visible():
             rooms.append(Room(name=room_name, available=True))
     return rooms
+
+
+def _unwrap(payload: dict) -> dict:
+    """EMS ServerApi responses wrap their JSON as a string under 'd'."""
+    data = payload["d"]
+    return json.loads(data) if isinstance(data, str) else data
+
+
+def _format_span(start_iso: str, end_iso: str) -> str:
+    """'2026-11-02T10:00:00', '2026-11-02T14:00:00' → '10:00 AM-2:00 PM'"""
+    return f"{_format_time(start_iso[11:16])}-{_format_time(end_iso[11:16])}"
+
+
+def _parse_search_payloads(
+    rooms_payload: dict,
+    bookings_payload: dict,
+    date_iso: str,
+    start_time: str,
+    end_time: str,
+    target_rooms: set[str],
+) -> SearchResult:
+    """Build a SearchResult from the EMS rooms/bookings API payloads.
+
+    `UnavailableReason` 0 means bookable and 1 means a time conflict. Other
+    codes (e.g. 11, set on every room once you have a booking that day) say
+    nothing about the room itself, so its own bookings decide whether it's free.
+    """
+    all_rooms = [
+        room
+        for building in _unwrap(rooms_payload)["Buildings"]
+        for room in building.get("Rooms") or []
+    ]
+    bookings = _unwrap(bookings_payload)["Bookings"]
+
+    day = date.fromisoformat(date_iso)
+    req_start = datetime.combine(day, time.fromisoformat(start_time))
+    req_end = datetime.combine(day, time.fromisoformat(end_time))
+
+    busy = defaultdict(list)
+    for b in bookings:
+        busy[b["RoomId"]].append(
+            (
+                datetime.fromisoformat(b["TimeBookingStart"]),
+                datetime.fromisoformat(b["TimeBookingEnd"]),
+            )
+        )
+
+    rooms = []
+    for room in all_rooms:
+        name = room["DisplayText"]
+        if name not in target_rooms:
+            continue
+        reason = room["UnavailableReason"]
+        if reason == REASON_NONE:
+            free = True
+        elif reason == REASON_CONFLICT:
+            free = False
+        else:
+            lo = req_start - timedelta(hours=room.get("SetupHours") or 0)
+            hi = req_end + timedelta(hours=room.get("TeardownHours") or 0)
+            free = not any(s < hi and e > lo for s, e in busy[room["Id"]])
+        if free:
+            rooms.append(
+                Room(
+                    name=name,
+                    available=True,
+                    bookable=reason == REASON_NONE,
+                    unavailable_reason=reason,
+                )
+            )
+    rooms.sort(key=lambda r: r.name)
+
+    names = {room["Id"]: room["DisplayText"] for room in all_rooms}
+    my_bookings = [
+        f"{names.get(b['RoomId'], 'room ' + str(b['RoomId']))}, "
+        f"{_format_span(b['EventStart'], b['EventEnd'])}"
+        for b in bookings
+        if b.get("WebUserIsOwner")
+    ]
+    return SearchResult(rooms=rooms, my_bookings=my_bookings)
+
+
+async def _search(
+    page: Page, date_iso: str, start_time: str, end_time: str, target_rooms: set[str]
+) -> SearchResult:
+    """Run the EMS search on `page` and work out which rooms are free/bookable.
+
+    Uses the EMS API payloads; if they can't be read, falls back to visible
+    add-to-cart buttons, which only reveal bookable rooms.
+    """
+    payloads = await _search_with_retry(
+        page, _format_date(date_iso), _format_time(start_time), _format_time(end_time)
+    )
+    if payloads:
+        try:
+            return _parse_search_payloads(
+                *payloads, date_iso, start_time, end_time, target_rooms
+            )
+        except (KeyError, TypeError, ValueError):
+            pass
+
+    print(
+        "Warning: could not read EMS availability data; "
+        "falling back to add-to-cart buttons.",
+        file=sys.stderr,
+    )
+    rooms = await _parse_available_rooms(page, target_rooms)
+    if not rooms:
+        # No buttons can mean "no free rooms" or "booking blocked"; don't guess.
+        raise BookingError(
+            "Could not determine room availability. Please try again later."
+        )
+    return SearchResult(rooms=rooms, detailed=False)
 
 
 def _format_date(date_iso: str) -> str:
@@ -157,12 +353,34 @@ def _format_time(time_24h: str) -> str:
     return f"{h}:{m:02d} {period}"
 
 
+async def _add_to_cart_and_reserve(page: Page, room_name: str, config: dict) -> None:
+    """Add the room to the cart and submit the reservation form."""
+    add_btn = page.locator(f'i.book-add-to-cart[aria-label*="{room_name}"]')
+    await add_btn.click()
+    await asyncio.sleep(1)
+
+    await page.locator("#setup--add-modal-save").click()
+    await asyncio.sleep(2)
+
+    await page.locator("#next-step-btn").click()
+    await asyncio.sleep(5)
+
+    await page.locator("#event-name").fill(config["name"])
+    await page.locator('[id="1stContactName"]').fill(config["name"])
+    await page.locator('[id="1stContactEmail"]').fill(config["email"])
+    await page.locator("#terms-and-conditions").check()
+    await asyncio.sleep(1)
+
+    await page.locator("button:has-text('Create Reservation')").first.click()
+    await asyncio.sleep(5)
+
+
 # === Public API ===
 
 
 async def _open_and_search(
     playwright, date: str, start_time: str, end_time: str, target_rooms: set[str]
-) -> list[Room]:
+) -> SearchResult:
     """Headless browser search."""
     context = await get_authenticated_context(playwright)
     if context is None:
@@ -170,23 +388,20 @@ async def _open_and_search(
 
     page = await context.new_page()
     try:
-        await _search_with_retry(page, date, start_time, end_time)
-        return await _parse_available_rooms(page, target_rooms)
+        return await _search(page, date, start_time, end_time, target_rooms)
     finally:
         await context.browser.close()
 
 
-async def search_rooms(date: str, start_time: str, end_time: str) -> list[Room]:
-    """Search for available rooms on EMS. Opens and closes its own browser."""
-    config = load_config()
-    target_rooms = set(config["rooms"])
-    formatted_date = _format_date(date)
-    formatted_start = _format_time(start_time)
-    formatted_end = _format_time(end_time)
+async def search_rooms(date: str, start_time: str, end_time: str) -> SearchResult:
+    """Search for free rooms on EMS. Opens and closes its own browser.
 
+    Args: date as YYYY-MM-DD, times as HH:MM (24h).
+    """
+    config = load_config()
     async with async_playwright() as p:
         return await _open_and_search(
-            p, formatted_date, formatted_start, formatted_end, target_rooms
+            p, date, start_time, end_time, set(config["rooms"])
         )
 
 
@@ -201,30 +416,17 @@ async def _open_search_and_book(
 
     page = await context.new_page()
     try:
-        await _search_with_retry(page, date, start_time, end_time)
-
-        # Check room availability + click
-        add_btn = page.locator(f'i.book-add-to-cart[aria-label*="{room_name}"]')
-        if await add_btn.count() == 0 or not await add_btn.first.is_visible():
+        result = await _search(page, date, start_time, end_time, {room_name})
+        room = next((r for r in result.rooms if r.name == room_name), None)
+        if room is None:
             raise BookingError(f"'{room_name}' is not available for the selected time.")
-        await add_btn.click()
-        await asyncio.sleep(1)
+        if not room.bookable:
+            raise BookingError(
+                f"'{room_name}' is free but cannot be booked: "
+                f"{result.blocked_reason(room)}."
+            )
 
-        await page.locator("#setup--add-modal-save").click()
-        await asyncio.sleep(2)
-
-        await page.locator("#next-step-btn").click()
-        await asyncio.sleep(5)
-
-        await page.locator("#event-name").fill(config["name"])
-        await page.locator('[id="1stContactName"]').fill(config["name"])
-        await page.locator('[id="1stContactEmail"]').fill(config["email"])
-        await page.locator("#terms-and-conditions").check()
-        await asyncio.sleep(1)
-
-        await page.locator("button:has-text('Create Reservation')").first.click()
-        await asyncio.sleep(5)
-
+        await _add_to_cart_and_reserve(page, room_name, config)
         return f"Booking confirmed: {room_name}"
     finally:
         await context.browser.close()
@@ -236,13 +438,9 @@ async def book_room(date: str, start_time: str, end_time: str, room_name: str) -
     if room_name not in config["rooms"]:
         raise BookingError(f"'{room_name}' is not a supported room.")
 
-    formatted_date = _format_date(date)
-    formatted_start = _format_time(start_time)
-    formatted_end = _format_time(end_time)
-
     async with async_playwright() as p:
         return await _open_search_and_book(
-            p, formatted_date, formatted_start, formatted_end, room_name, config
+            p, date, start_time, end_time, room_name, config
         )
 
 
@@ -262,12 +460,10 @@ async def _open_search_and_book_interactive(
 
     page = await context.new_page()
     try:
-        await _search_with_retry(page, date, start_time, end_time)
-
-        rooms = await _parse_available_rooms(page, target_rooms)
-
+        result = await _search(page, date, start_time, end_time, target_rooms)
+        rooms = result.bookable_rooms
         if not rooms:
-            raise BookingError("No rooms available for the selected time.")
+            raise BookingError(result.no_bookable_message())
 
         if room_selector:
             selected = await room_selector(rooms)
@@ -276,26 +472,11 @@ async def _open_search_and_book_interactive(
         else:
             selected = rooms[0]
 
-        add_btn = page.locator(f'i.book-add-to-cart[aria-label*="{selected.name}"]')
-        await add_btn.click()
-        await asyncio.sleep(1)
-
-        await page.locator("#setup--add-modal-save").click()
-        await asyncio.sleep(2)
-
-        await page.locator("#next-step-btn").click()
-        await asyncio.sleep(5)
-
-        await page.locator("#event-name").fill(config["name"])
-        await page.locator('[id="1stContactName"]').fill(config["name"])
-        await page.locator('[id="1stContactEmail"]').fill(config["email"])
-        await page.locator("#terms-and-conditions").check()
-        await asyncio.sleep(1)
-
-        await page.locator("button:has-text('Create Reservation')").first.click()
-        await asyncio.sleep(5)
-
-        return f"Booking confirmed: {selected.name} ({date} {start_time}-{end_time})"
+        await _add_to_cart_and_reserve(page, selected.name, config)
+        return (
+            f"Booking confirmed: {selected.name} "
+            f"({_format_date(date)} {_format_time(start_time)}-{_format_time(end_time)})"
+        )
     finally:
         await context.browser.close()
 
@@ -311,18 +492,13 @@ async def search_and_book(
             Callback for user to select a room. If None, selects the first room.
     """
     config = load_config()
-    target_rooms = set(config["rooms"])
-    formatted_date = _format_date(date)
-    formatted_start = _format_time(start_time)
-    formatted_end = _format_time(end_time)
-
     async with async_playwright() as p:
         return await _open_search_and_book_interactive(
             p,
-            formatted_date,
-            formatted_start,
-            formatted_end,
-            target_rooms,
+            date,
+            start_time,
+            end_time,
+            set(config["rooms"]),
             config,
             room_selector,
         )

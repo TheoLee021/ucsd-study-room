@@ -19,7 +19,7 @@ from study_room.booking import (
     _format_date,
     _format_time,
     _navigate_to_search,
-    _parse_available_rooms,
+    _parse_search_payloads,
 )
 from study_room.config import load_config
 
@@ -55,7 +55,7 @@ async def run_headless_search(test_date: str):
             await authenticate(page)
 
             print("[2/4] Opening EMS and searching...")
-            await _navigate_to_search(
+            payloads = await _navigate_to_search(
                 page, formatted_date, formatted_start, formatted_end
             )
 
@@ -70,13 +70,19 @@ async def run_headless_search(test_date: str):
                 return False
 
             print("[4/4] Parsing room list...")
-            rooms = await _parse_available_rooms(page, target_rooms)
+            if payloads is None:
+                print("FAIL: EMS availability API responses were not captured")
+                return False
+            result = _parse_search_payloads(
+                *payloads, test_date, "14:00", "16:00", target_rooms
+            )
 
             print()
             print("SUCCESS: Headless search succeeded!")
-            print(f"  {len(rooms)} available room(s):")
-            for room in rooms:
-                print(f"    - {room.name}")
+            print(f"  {len(result.rooms)} free room(s):")
+            for room in result.rooms:
+                status = "bookable" if room.bookable else result.blocked_reason(room)
+                print(f"    - {room.name} ({status})")
             return True
 
         except Exception as e:
