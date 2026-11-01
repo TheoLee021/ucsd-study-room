@@ -148,18 +148,20 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 async def _handle_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         if name == "search_rooms":
-            rooms = await search_rooms(
+            result = await search_rooms(
                 arguments["date"], arguments["start_time"], arguments["end_time"]
             )
+            rooms = result.bookable_rooms
             if not rooms:
-                return [
-                    TextContent(
-                        type="text", text="No rooms available for the given time."
-                    )
-                ]
+                return [TextContent(type="text", text=result.no_bookable_message())]
             lines = [f"{len(rooms)} room(s) available:"]
             for i, r in enumerate(rooms, 1):
                 lines.append(f"  {i}. {r.name}")
+            if not result.detailed:
+                lines.append(
+                    "\nNote: EMS availability data could not be read; "
+                    "showing bookable rooms only."
+                )
             lines.append("\nUse the book_room tool to reserve a room.")
             return [TextContent(type="text", text="\n".join(lines))]
 
